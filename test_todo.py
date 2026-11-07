@@ -475,6 +475,32 @@ class TestLocalIssueTracker(unittest.TestCase):
     # Close-on-closed remains an error
     # ------------------------------------------------------------------
 
+    def test_close_no_hash_line_mints_hash(self):
+        # Manual no-hash line closed by line number: mint a hash at
+        # close time; the archived line is addressable in done.txt.
+        with open(todo.TODO_FILE, 'w') as f:
+            f.write("manual no-hash line\n")
+        stderr = _capture_stderr()
+        old_stderr = sys.stderr
+        sys.stderr = stderr
+        try:
+            todo.cmd_close(_ns(identifier="1", verbose=False))
+        finally:
+            sys.stderr = old_stderr
+        todo_lines = self._read(todo.TODO_FILE).splitlines()
+        self.assertEqual(todo_lines, [])  # line removed
+        done_lines = self._read(todo.DONE_FILE).splitlines()
+        self.assertEqual(len(done_lines), 1)
+        self.assertTrue(done_lines[0].startswith("x "))
+        self.assertIn("manual no-hash line", done_lines[0])
+        m = todo.HASH_IN_LINE_RE.search(done_lines[0])
+        self.assertTrue(m, "minted hash missing from archived line")
+        minted = m.group(1)
+        # The minted hash is addressable in done.txt.
+        resolved = todo.resolve_identifier(_ns(identifier="hash:" + minted, verbose=False),
+                                           "hash:" + minted)
+        self.assertEqual(resolved, minted)
+
     def test_close_twice_errors(self):
         h = self._add("Once only")
         todo.cmd_close(_ns(identifier="hash:"+h))

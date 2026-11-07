@@ -63,3 +63,20 @@ post-resolution validation (e.g. `close` requires the Issue to be in
   via `hash:<hex>`.
 - `list` numbering must stay byte-compatible with the resolver's
   line-number path (including blank-line gaps).
+
+## No-hash manual lines (added 2026-11-07)
+
+`todo.txt` lines may be written by hand without a `hash:` token (the
+Index is a plain text file). They are outside the tracker's schema:
+title matching still finds them, but hash resolution and the Details
+Directory do not apply. The resolver keeps failing loudly on them
+("has no hash: token") — the resolution contract is one full hash.
+
+**Close-only exception**: `close` bypasses the resolver for in-range
+line numbers that point at a no-hash line. It mints a hash at close
+time (`generate_hash(title, close-timestamp)`, the same function as
+`add`), removes the line, and archives `x <date> <line> hash:<minted>`
+in `done.txt`. The minted hash is then addressable in the Archive via
+`hash:<hex>`. Rationale: the user's surprise was that a manual line
+could never be closed; the Archive is the natural place for a line to
+acquire its hash. `show`/`comment`/`edit` keep the loud error.

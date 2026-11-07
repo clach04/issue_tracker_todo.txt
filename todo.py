@@ -154,19 +154,29 @@ def _pick_title_match(args, token, matches):
     _trace(args, "resolve: '{}' -> {} via title".format(token, h))
     return h
 
-def _resolve_line_number(args, token):
-    n = int(token)
+def _in_range_line(token):
+    """Return the raw stripped line for an in-range all-digit token, else None.
+
+    Out-of-range means 'not a line number' (todo.txt stays small); the
+    caller falls through to hash then title lookup (ADR-0002).
+    """
+    if not DIGITS_RE.match(token):
+        return None
     with open(TODO_FILE, 'r') as f:
         lines = f.readlines()
+    n = int(token)
     if n < 1 or n > len(lines):
-        # Out of range: token is not a line number (todo.txt stays small).
-        # Caller falls through to hash then title lookup.
-        _trace(args, "resolve: '{}' out of range (1..{}); not a line number".format(token, len(lines)))
         return None
-    line = lines[n - 1].strip()
+    return lines[n - 1].strip()
+
+def _resolve_line_number(args, token):
+    line = _in_range_line(token)
+    if line is None:
+        _trace(args, "resolve: '{}' out of range; not a line number".format(token))
+        return None
     h = _hash_of_line(line)
     if not h:
-        _fail("line {} in {} has no hash: token: {}".format(n, TODO_FILE, line))
+        _fail("line {} in {} has no hash: token: {}".format(token, TODO_FILE, line))
     _trace(args, "resolve: '{}' -> {} via line number".format(token, h))
     return h
 
@@ -344,6 +354,25 @@ def cmd_comment(args):
 
 def cmd_close(args):
     ensure_environment()
+    # Close-only exception for no-hash manual lines (ADR-0002): resolve
+    # by line number first; if the line has no hash: token, mint a hash
+    # at close time so the archived line is addressable in done.txt.
+    raw_line = _in_range_line(args.identifier)
+    if raw_line and not _hash_of_line(raw_line):
+        title = _title_from_line(raw_line)
+        full_hash = generate_hash(title)
+        minted = "x {} {} hash:{}\n".format(datetime.date.today().isoformat(), raw_line, full_hash)
+        with open(TODO_FILE, 'r') as f:
+            lines = f.readlines()
+        n = int(args.identifier)
+        new_todo_lines = lines[:n - 1] + lines[n:]
+        with open(TODO_FILE, 'w') as f:
+            f.writelines(new_todo_lines)
+        with open(DONE_FILE, 'a') as f:
+            f.write(minted)
+        _trace(args, "close: minted hash {} for no-hash line {}".format(full_hash, n))
+        print("Closed and archived issue [{}] (hash minted at close)".format(full_hash))
+        return
     full_hash = resolve_identifier(args, args.identifier)
 
     # Read todo.txt, find line, remove, and append to done.txt with 'x YYYY-MM-DD'

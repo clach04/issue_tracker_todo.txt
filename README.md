@@ -18,6 +18,10 @@ Designed for developers who want a fast, grep-friendly, dependency-free tracker 
 
     Title-only issues (added without `-d`) live in `todo.txt` alone until their first comment or `edit`, which lazily creates the directory.
 
+    Manually added `todo.txt` lines without a `hash:` token are supported
+    for closing: `todo.py close <line number>` mints a hash at close time
+    and archives the line with it (`x <date> <line> hash:<minted>`).
+
 ---
 
 ## todo.txt key balue pairs
