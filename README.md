@@ -37,6 +37,38 @@ Here is a breakdown of the key-value pairs and metadata tags utilized by the loc
   * **Context Tags (`@<context>`)** (Standard `todo.txt` Metadata)
     Used to categorize issues by category, environment, or task type (e.g., `@bug`, `@enhancement`, `@cli`).
 
+## How the hash is created
+
+`add` and the close-time mint for hand-written lines share one function
+(`generate_hash` in `todo.py`):
+
+```text
+hash = sha256_hex( title_utf8 + local_iso_timestamp )[:8]
+```
+
+  * `title` is the issue title as UTF-8. For close-time minting of a
+    hand-written line it is the title parsed from that line: the
+    `hash:` token onward is cut, leading priority and date tokens are
+    dropped, and the remaining words are re-joined with single spaces
+    (so runs of whitespace collapse before hashing).
+  * `local_iso_timestamp` is `datetime.datetime.now().isoformat()` in
+    local time (microseconds included when non-zero, e.g.
+    `2026-11-07T13:49:02.123456`), taken at mint time and never stored.
+  * The result is the first 8 characters of the lowercase hex SHA-256
+    digest, so a hash is always 8 chars of `[0-9a-f]`.
+
+Consequences:
+
+  * The hash is not a function of the title alone: adding the same
+    title twice yields two different hashes. It is also independent of
+    the line number, so reordering `todo.txt` renames nothing.
+  * An 8-char prefix is 32 bits of digest space. Collisions are neither
+    detected nor resolved, so no uniqueness check is performed; the
+    timestamp makes them practically impossible for distinct issues.
+  * Hashes are not reproducible (local clock, microsecond resolution)
+    and nothing re-derives them: the `hash:` token in the Index, or in
+    `done.txt` after closing, is the only record.
+
 ## File Layout
 
 ```text
