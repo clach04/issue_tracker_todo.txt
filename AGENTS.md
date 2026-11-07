@@ -27,11 +27,12 @@ NEVER use `git add -A` or `git add .`; always list files explicitly in `git add`
 
 ## docs/plans status scheme
 
-Every file in `docs/plans/` has a `Status:` line under its title:
-`open` | `partial - <shipped, date>; remainder: <pointer>` (stays) |
-`done <date>` (move the file to `docs/plans/done/`, unchanged). A plan is
-done only when every TODO item it spawned is closed or explicitly deferred
-to a named TODO item. Full convention: `docs/plans/README.md`.
+Plan files in `docs/plans/` carry a `Status:` line under their title
+(missing = treated as `open`). A plan is done only when every TODO item
+it spawned is closed or explicitly deferred to a named TODO item; done
+plans move unchanged to `docs/plans/done/`. Session docs (grill
+summaries, handover briefs) are exempt from the status scheme. Full
+convention: `docs/plans/README.md`.
 
 ## Design records
 
