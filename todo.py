@@ -322,6 +322,8 @@ def cmd_show(args):
 
     print("==================================================")
     print("Issue Hash : {}".format(full_hash))
+    # Explicit Hash Form (ADR-0002): copy/paste target for other commands.
+    print("Hash Token : hash:{}".format(full_hash))
     if index_line:
         print("Index Line : {}".format(index_line))
     print("==================================================")

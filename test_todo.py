@@ -287,6 +287,43 @@ class TestLocalIssueTracker(unittest.TestCase):
         out = _as_text(stderr)
         self.assertIn("No issue found", out)
 
+    # show: explicit hash token for copy/paste
+    # ------------------------------------------------------------------
+
+    def _show(self, identifier):
+        # Run cmd_show with stdout captured; return its text.
+        out = _capture_stdout()
+        old_out = sys.stdout
+        sys.stdout = out
+        try:
+            todo.cmd_show(_ns(identifier=identifier))
+        finally:
+            sys.stdout = old_out
+        return _as_text(out)
+
+    def test_show_prints_pasteable_hash_token(self):
+        issue_hash = self._add("Paste me", description="Body.")
+        out = self._show("hash:" + issue_hash)
+        token = "hash:" + issue_hash
+        self.assertIn("Issue Hash : {}".format(issue_hash), out)
+        self.assertIn("Hash Token : {}".format(token), out)
+        # The printed token must round-trip through the resolver as-is.
+        self.assertEqual(
+            todo.resolve_identifier(_ns(identifier=token, verbose=False), token),
+            issue_hash)
+
+    def test_show_prints_pasteable_hash_token_for_digit_only_hash(self):
+        # ~1 in 43 hashes are all decimal digits; the bare value would be
+        # read as a line number, so the explicit form is what makes it
+        # pasteable (ADR-0002).
+        err, code, _calls = self._add_with_fake_generate("Digits", ['12345678'])
+        self.assertEqual(code, 0, "unexpected failure: {!r}".format(err))
+        out = self._show("hash:12345678")
+        self.assertIn("Hash Token : hash:12345678", out)
+        self.assertEqual(
+            todo.resolve_identifier(_ns(identifier="hash:12345678", verbose=False),
+                                    "hash:12345678"), "12345678")
+
     # ------------------------------------------------------------------
     # Identifier resolution
     # ------------------------------------------------------------------

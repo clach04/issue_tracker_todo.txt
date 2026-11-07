@@ -2,7 +2,6 @@
 (C) 2026-11-06 Evaluate detached-worktree git strategy hash:d252c7a2 +trackertool @idea
 (C) 2026-11-06 Implement list --sort hash:8d8ab446 +trackertool @feature
 (C) 2026-11-06 Support EDITOR values containing arguments hash:506ef7da +trackertool @techdebt
-update "show" to also include copy/pastable `hash` key value. Does include title so may already be a non-issue hash:0eff2c10
 options to specify the todo.txt file name (and/or directory). env and commandline flags? hash:9efddab9 @feature
 option to ensure edit can be explictly disabled, i.e. not spawning editors under batch hash:4e083e78
 document common tags, `@techdebt` something new for docs hash:ae89067d
