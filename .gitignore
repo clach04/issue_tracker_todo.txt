@@ -2,4 +2,6 @@ __pycache__/
 *.pyc
 .codgent/
 *.bak
-
+*~
+# TODO vim swap swp files?
+.issues/**/*.swp
