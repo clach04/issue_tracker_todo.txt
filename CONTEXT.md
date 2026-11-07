@@ -39,3 +39,7 @@ _Avoid_: Raw line, bare entry, hashless todo
 **Mint**:
 To bestow an Identifier on an Unhashed Line. Happens at close time or on demand for the whole Index.
 _Avoid_: Backfill, assign, generate hash
+
+**Editor Launch Suppressed**:
+The state in which `edit` starts no editor process, because the environment variable `TODO_NO_EDITOR` is non-empty. Editing an Issue is not disabled: `issue.md` stays writable by any other means. The command itself fails loudly (exit 1) before any Details Directory side effect.
+_Avoid_: Disabled editing, read-only issue, no-op edit, silent skip

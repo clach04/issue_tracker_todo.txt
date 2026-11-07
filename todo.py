@@ -552,7 +552,17 @@ def _find_editor():
             return path
     return None
 
+def _editor_launch_disabled():
+    # Non-empty TODO_NO_EDITOR suppresses the editor launch (batch/CI).
+    # No value parsing: '0' or 'false' also suppress; unset to re-enable.
+    return bool(os.environ.get('TODO_NO_EDITOR'))
+
 def cmd_edit(args):
+    # Checked BEFORE any side effect: a suppressed launch must not create
+    # a Details Directory or a bootstrap issue.md.
+    if _editor_launch_disabled():
+        _fail("editor launch disabled by $TODO_NO_EDITOR"
+              " (unset it to launch an editor)")
     ensure_environment()
     full_hash = resolve_identifier(args, args.identifier)
     # Bootstrap: a description-less issue has no Details Directory yet;

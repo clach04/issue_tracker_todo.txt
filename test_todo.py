@@ -565,6 +565,80 @@ class TestLocalIssueTracker(unittest.TestCase):
         self.assertEqual(excinfo.exception.code, 1)
         self.assertIn("no editor found", _as_text(stderr))
 
+    # edit: TODO_NO_EDITOR suppresses the editor launch (batch/CI)
+
+    def _with_no_editor_env(self, value):
+        # Set (or clear, when value is None) TODO_NO_EDITOR; returns the
+        # previous value for restoration in a finally block.
+        old = os.environ.get('TODO_NO_EDITOR')
+        if value is None:
+            os.environ.pop('TODO_NO_EDITOR', None)
+        else:
+            os.environ['TODO_NO_EDITOR'] = value
+        return old
+
+    def _restore_no_editor_env(self, old):
+        os.environ.pop('TODO_NO_EDITOR', None)
+        if old is not None:
+            os.environ['TODO_NO_EDITOR'] = old
+
+    def _edit_capturing_stderr(self, identifier):
+        stderr = _capture_stderr()
+        old_err = sys.stderr
+        sys.stderr = stderr
+        try:
+            with self.assertRaises(SystemExit) as excinfo:
+                todo.cmd_edit(_ns(identifier=identifier, verbose=False))
+        finally:
+            sys.stderr = old_err
+        return excinfo.exception.code, _as_text(stderr)
+
+    def test_edit_launch_disabled_by_env_fails_loudly(self):
+        h = self._add("Batch issue")
+        calls = []
+        old_call, old_find = todo.subprocess.call, todo._find_editor
+        todo.subprocess.call = lambda cmd: calls.append(cmd) or 0
+        todo._find_editor = lambda: 'fake_editor'
+        old_env = self._with_no_editor_env('1')
+        try:
+            code, err = self._edit_capturing_stderr("hash:" + h)
+        finally:
+            self._restore_no_editor_env(old_env)
+            todo.subprocess.call, todo._find_editor = old_call, old_find
+        self.assertEqual(code, 1)
+        self.assertIn("editor launch disabled", err)
+        self.assertIn("TODO_NO_EDITOR", err)
+        self.assertEqual(calls, [], "no editor may be spawned when suppressed")
+
+    def test_edit_launch_disabled_before_any_side_effect(self):
+        # A refused edit must not bootstrap the Details Directory.
+        h = self._add("Untouched issue")
+        self.assertFalse(os.path.exists(os.path.join(todo.ISSUES_DIR, h)))
+        old_env = self._with_no_editor_env('yes')
+        try:
+            code, err = self._edit_capturing_stderr("hash:" + h)
+        finally:
+            self._restore_no_editor_env(old_env)
+        self.assertEqual(code, 1)
+        self.assertIn("editor launch disabled", err)
+        self.assertFalse(os.path.exists(os.path.join(todo.ISSUES_DIR, h)),
+                         "suppressed launch must not create the Details Directory")
+
+    def test_edit_enabled_when_env_unset(self):
+        h = self._add("Editable issue")
+        calls = []
+        old_call, old_find = todo.subprocess.call, todo._find_editor
+        todo.subprocess.call = lambda cmd: calls.append(cmd) or 0
+        todo._find_editor = lambda: 'fake_editor'
+        old_env = self._with_no_editor_env(None)
+        try:
+            todo.cmd_edit(_ns(identifier="hash:" + h, verbose=False))
+        finally:
+            self._restore_no_editor_env(old_env)
+            todo.subprocess.call, todo._find_editor = old_call, old_find
+        self.assertEqual(len(calls), 1, "editor must spawn when env is unset")
+        self.assertEqual(calls[0][0], 'fake_editor')
+
     # ------------------------------------------------------------------
     # list --closed
     # ------------------------------------------------------------------

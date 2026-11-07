@@ -104,6 +104,24 @@ todo.py hash "some title"    # one line, by title substring
 - No `--dry-run`: `todo.txt` is versioned, so `git diff` is the
   preview, and the command prints one line per minted entry.
 
+## Suppressing the editor launch
+
+`edit` spawns `$EDITOR` / `$VISUAL` (or `vim`, `nano`, `vi`, `notepad`).
+Batch and CI shells rarely want that, so a non-empty `TODO_NO_EDITOR`
+suppresses the launch:
+
+```text
+TODO_NO_EDITOR=1 todo.py edit 3   # Error: editor launch disabled by $TODO_NO_EDITOR
+```
+
+- It suppresses **launching an editor**, nothing else: no process is
+  started, and `edit` fails loudly instead (exit 1, no silent success).
+- Any non-empty value suppresses; `0` and `false` do too (no value
+  parsing). Unset or empty leaves the launch enabled.
+- The check runs **before** any side effect: a refused `edit` creates no
+  `.issues/<hash>/` directory and no bootstrap `issue.md`.
+- Only `edit` reads it; no other command spawns an editor.
+
 ## File Layout
 
 ```text
