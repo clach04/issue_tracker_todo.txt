@@ -8,3 +8,4 @@ x 2026-11-07 (C) 2026-11-06 Fix typos in AGENTS.md hash:968bb8bf +trackertool @t
 x 2026-11-07 test manually added todo items without a hash hash:101185c8
 x 2026-11-07 README should document how hash is created hash:5c2000ea
 x 2026-11-07 new mode to add hashes for entries missing a hash entry hash:47e35a1c
+x 2026-11-07 (C) 2026-11-07 README typos: "key balue pairs" heading and malformed bold span hash:e8720fa5 +trackertool @techdebt

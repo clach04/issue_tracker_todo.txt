@@ -1,6 +1,5 @@
 (C) 2026-11-07 no backfill path for done.txt (hash --closed deferred) hash:b6e88862 +trackertool @feature
 (C) 2026-11-07 add lacks the uniqueness retry that "hash" and close-time mint have hash:b6670543 +trackertool @techdebt
-(C) 2026-11-07 README typos: "key balue pairs" heading and malformed bold span hash:e8720fa5 +trackertool @techdebt
 (C) 2026-11-06 Evaluate detached-worktree git strategy hash:d252c7a2 +trackertool @idea
 (C) 2026-11-06 Implement list --sort hash:8d8ab446 +trackertool @feature
 (C) 2026-11-06 Support EDITOR values containing arguments hash:506ef7da +trackertool @techdebt

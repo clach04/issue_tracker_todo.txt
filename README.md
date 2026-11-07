@@ -24,13 +24,13 @@ Designed for developers who want a fast, grep-friendly, dependency-free tracker 
 
 ---
 
-## todo.txt key balue pairs
+## todo.txt key value pairs
 
 Here is a breakdown of the key-value pairs and metadata tags utilized by the local issue tracker's extended `todo.txt` format:
 
   * **`hash:<ID>`** (Custom Key-Value)
     The core linking mechanism of the tool. It maps a `todo.txt` index line directly to its sibling directory inside `.issues/<hash>/` (e.g., `hash:7a4f9b21`). Storing the hash explicitly ensures that if you edit or update the issue title in the index file, the underlying description, comments, and attachments remain permanently and unambiguously attached.
-  * **Priority `(A)` through `(Z)**` (Standard Prefix Notation)
+  * **Priority `(A)` through `(Z)`** (Standard Prefix Notation)
     Placed at the very beginning of the index line to indicate urgency (e.g., `(A)` for critical issues, `(B)` for normal tasks). The CLI parses this for filtering and sorting via `-p` / `--priority`.
   * **Project Tags (`+<project>`)** (Standard `todo.txt` Metadata)
     Used to group issues under specific subsystems, modules, or features within your repository (e.g., `+backend`, `+auth`).
