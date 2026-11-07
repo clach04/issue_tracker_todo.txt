@@ -31,3 +31,11 @@ _Avoid_: Open queue, backlog
 **Archive**:
 The set of closed Issues, appended to `done.txt`. Identifiers resolve against the Active List only; the Archive is reachable via hash.
 _Avoid_: History, graveyard
+
+**Unhashed Line**:
+An Index line written by hand with no Explicit Hash. Outside the tracker's schema: it has no Details Directory and no Identifier, so it can only be Minted (at close, or by `hash`) or left alone.
+_Avoid_: Raw line, bare entry, hashless todo
+
+**Mint**:
+To bestow an Identifier on an Unhashed Line. Happens at close time or on demand for the whole Index.
+_Avoid_: Backfill, assign, generate hash
