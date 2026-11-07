@@ -4,3 +4,5 @@ x 2026-11-06 2026-11-06 noisy tests hash:aa5300d9
 x 2026-11-06 2026-11-06 No-dir issue CLI smoke hash:549da53d
 x 2026-11-06 2026-11-06 Fresh no-dir smoke hash:be6c93dc
 x 2026-11-06 2026-11-06 Desc issue smoke hash:dc0ab4a1
+x 2026-11-07 (C) 2026-11-06 Fix typos in AGENTS.md hash:968bb8bf +trackertool @techdebt
+x 2026-11-07 test manually added todo items without a hash hash:101185c8
