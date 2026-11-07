@@ -1,8 +1,8 @@
 # Local Issue Tracker CLI Specification
 
-Status: partial - shared identifier resolver (hash:/digits/hex-like/title dispatch),
-editor chain, --verbose, UTC timestamps, quiet tests shipped 2026-11-06;
-remainder: TODO at todo.py:383 (EDITOR values containing arguments).
+Status: done 2026-11-06 - CLI shipped per plan (resolver, editor chain,
+verbose, UTC timestamps, quiet tests); deferred remainder filed as tracker
+issues: editor args (506ef7da), --sort (8d8ab446), worktree idea (d252c7a2).
 
 This document outlines the command-line interface (CLI) specification for the Python-based local repository issue and bug tracking system. The tool provides robust management over a human-readable, grep-friendly `todo.txt` index while maintaining rich markdown descriptions, timestamped comments, and attachments in sibling `.issues/<hash>/` directories.
 
