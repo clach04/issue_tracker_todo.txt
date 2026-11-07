@@ -7,3 +7,4 @@ options to specify the todo.txt file name (and/or directory). env and commandlin
 option to ensure edit can be explictly disabled, i.e. not spawning editors under batch
 new mode to add hashes for entries missing a hash entry
 document common tags, `@techdebt` something new for docs
+review all ADRs for future todo ideas not captured in task list
