@@ -5,6 +5,7 @@ Local Issue & Bug Tracker (Python 2 & 3 Compatible, Stdlib Only)
 """
 from __future__ import print_function, unicode_literals
 
+import io
 import os
 import re
 import sys
@@ -49,6 +50,20 @@ def generate_hash(title):
     timestamp = datetime.datetime.now().isoformat().encode('utf-8')
     hasher.update(title.encode('utf-8') + timestamp)
     return hasher.hexdigest()[:8]
+
+MINT_ATTEMPTS = 10
+
+def mint_hash_unique(title, taken):
+    """Mint a hash not in 'taken' (iterable of short hashes).
+
+    ADR-0003: 'hash' and close-time minting retry on collision; 'add'
+    still mints unchecked (tracked as a tracker issue).
+    """
+    for _attempt in range(MINT_ATTEMPTS):
+        candidate = generate_hash(title)
+        if candidate not in taken:
+            return candidate
+    _fail("could not mint a unique hash for {!r} after {} attempts".format(title, MINT_ATTEMPTS))
 
 def _trace(args, msg):
     # Trace-level output for major steps; only under --verbose.
@@ -360,7 +375,7 @@ def cmd_close(args):
     raw_line = _in_range_line(args.identifier)
     if raw_line and not _hash_of_line(raw_line):
         title = _title_from_line(raw_line)
-        full_hash = generate_hash(title)
+        full_hash = mint_hash_unique(title, _all_hash_tokens())
         minted = "x {} {} hash:{}\n".format(datetime.date.today().isoformat(), raw_line, full_hash)
         with open(TODO_FILE, 'r') as f:
             lines = f.readlines()
@@ -402,6 +417,103 @@ def cmd_close(args):
         f.write(matched_line)
 
     print("Closed and archived issue [{}]".format(full_hash))
+
+# ---------------------------------------------------------------------------
+# Mint: bestow a hash on Unhashed Lines (hand-written Index lines)
+#
+# ADR-0003. 'hash' repairs todo.txt only; done.txt backfill is deferred.
+# The minted token is APPENDED at the end of the line so the derived title
+# (everything before the hash: token) does not change and existing
+# title-substring identifiers keep resolving.
+# ---------------------------------------------------------------------------
+
+def _read_raw_lines(filepath):
+    # newline='' + binary-safe join: a rewrite is byte-identical apart
+    # from the appended tokens (CRLF worktrees stay CRLF). Invalid UTF-8
+    # fails loudly rather than silently mangling bytes.
+    with io.open(filepath, 'r', encoding='utf-8', newline='') as f:
+        raw = f.read()
+    if not raw:
+        return []
+    parts = raw.split('\n')
+    lines = ["{}\n".format(p) for p in parts[:-1]]
+    if parts[-1]:
+        lines.append(parts[-1])
+    return lines
+
+def _write_raw_lines(filepath, lines):
+    with io.open(filepath, 'w', encoding='utf-8', newline='') as f:
+        f.write(''.join(lines))
+
+def _all_hash_tokens():
+    taken = set()
+    for filepath in (TODO_FILE, DONE_FILE):
+        if not os.path.exists(filepath):
+            continue
+        with io.open(filepath, 'r', encoding='utf-8', newline='') as f:
+            for line in f:
+                h = _hash_of_line(line)
+                if h:
+                    taken.add(h.lower())
+    return taken
+
+def _unhashed_line_numbers(lines):
+    # Non-blank lines with no hash: token, 1-based like `list` numbering.
+    return [n for n, line in enumerate(lines, 1)
+            if line.strip() and not _hash_of_line(line)]
+
+def _mint_targets(args, lines):
+    """Return the 1-based line numbers to mint (ADR-0003)."""
+    if args.identifier is None:
+        return _unhashed_line_numbers(lines)
+    token = args.identifier
+    if DIGITS_RE.match(token):
+        n = int(token)
+        if 1 <= n <= len(lines):
+            raw = lines[n - 1].strip()
+            if not raw:
+                _fail("line {} in {} is blank".format(token, TODO_FILE))
+            existing = _hash_of_line(raw)
+            if existing:
+                _fail("line {} in {} already has hash:{}".format(token, TODO_FILE, existing))
+            return [n]
+        _trace(args, "hash: line {} out of range; trying title".format(token))
+    matches = [(n, line) for n, line in enumerate(lines, 1)
+               if line.strip() and not _hash_of_line(line)
+               and token.lower() in _title_from_line(line.strip()).lower()]
+    if not matches:
+        _fail("no Unhashed Line matching '{}' in {}".format(token, TODO_FILE))
+    if len(matches) > 1:
+        _fail_ambiguous(token, [], [{'title': _title_from_line(l.strip()), 'line': l.strip()}
+                                    for _n, l in matches])
+    return [matches[0][0]]
+
+def cmd_hash(args):
+    ensure_environment()
+    lines = _read_raw_lines(TODO_FILE)
+    targets = _mint_targets(args, lines)
+    if not targets:
+        print("nothing to mint ({} has no Unhashed Lines)".format(TODO_FILE))
+        return
+    taken = _all_hash_tokens()
+    minted = []
+    for n in targets:
+        line = lines[n - 1]
+        body = line.rstrip('\r\n')
+        eol = line[len(body):]
+        title = _title_from_line(body)
+        new_hash = mint_hash_unique(title, taken)
+        taken.add(new_hash)
+        lines[n - 1] = "{} hash:{}{}".format(body, new_hash, eol)
+        minted.append((n, new_hash, title))
+        _trace(args, "hash: line {} -> {}".format(n, new_hash))
+    if not minted:
+        print("nothing to mint ({} has no Unhashed Lines)".format(TODO_FILE))
+        return
+    _write_raw_lines(TODO_FILE, lines)
+    for n, new_hash, title in minted:
+        print("line {}: hash:{} <- {}".format(n, new_hash, title))
+    print("Minted {} hash(es) in {}".format(len(minted), TODO_FILE))
 
 def _which(program):
     # shutil.which is Python 3 only; minimal stdlib equivalent for py2/3.
@@ -500,6 +612,12 @@ def main():
     parser_edit = subparsers.add_parser('edit', parents=[common], help='Open issue description in $EDITOR')
     parser_edit.add_argument('identifier', help='Issue identifier: hash:<hex>, line number, hash prefix, or title substring')
 
+    # hash (mint hashes for Unhashed Lines)
+    parser_hash = subparsers.add_parser('hash', parents=[common],
+                                        help='Mint hashes for hand-written todo.txt lines that have none')
+    parser_hash.add_argument('identifier', nargs='?', default=None,
+                             help='Optional: line number or title substring; omit for every Unhashed Line')
+
     args = parser.parse_args()
 
     if args.command == 'add':
@@ -514,6 +632,8 @@ def main():
         cmd_close(args)
     elif args.command == 'edit':
         cmd_edit(args)
+    elif args.command == 'hash':
+        cmd_hash(args)
     else:
         parser.print_help()
 

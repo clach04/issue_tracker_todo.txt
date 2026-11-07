@@ -69,6 +69,39 @@ Consequences:
     and nothing re-derives them: the `hash:` token in the Index, or in
     `done.txt` after closing, is the only record.
 
+## Minting hashes for hand-written lines
+
+Because `todo.txt` is a plain text file, lines can be written by hand
+without a `hash:` token. An **Unhashed Line** has no details directory
+and no identifier: `show` / `comment` / `edit` refuse it, and `close`
+mints a hash at close time so the archived line is addressable.
+
+`todo.py hash` mints hashes for them on demand:
+
+```text
+todo.py hash                 # every Unhashed Line in todo.txt
+todo.py hash 7               # one line, by line number
+todo.py hash "some title"    # one line, by title substring
+```
+
+- The minted token is **appended at the end of the line**
+  (`... some title hash:1a2b3c4d`), not inserted before the
+  `+project` / `@context` tags. Appending keeps the derived title
+  unchanged, so existing title-substring identifiers keep resolving.
+- Already-hashed lines are never touched, so `hash` is idempotent. When
+  there is nothing to mint it prints `nothing to mint` and does not
+  write the file at all.
+- Targeting an already-hashed line is an error (exit 1), as is an
+  ambiguous title match among Unhashed Lines.
+- Minted hashes are retried until unique across the hashes in
+  `todo.txt` and `done.txt` (10 tries), then the command fails loudly.
+  `add` does not yet do this (close-time minting does).
+- `todo.txt` only: `done.txt` has no backfill yet. No `.issues/<hash>/`
+  directory is created - a repaired line stays title-only, and the
+  directory appears on the first comment or `edit`.
+- No `--dry-run`: `todo.txt` is versioned, so `git diff` is the
+  preview, and the command prints one line per minted entry.
+
 ## File Layout
 
 ```text

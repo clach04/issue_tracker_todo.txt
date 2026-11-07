@@ -515,5 +515,152 @@ class TestLocalIssueTracker(unittest.TestCase):
         self.assertEqual(excinfo.exception.code, 1)
         self.assertIn("might already be closed", _as_text(stderr))
 
+    # ------------------------------------------------------------------
+    # hash: mint hashes for Unhashed Lines (ADR-0003)
+    # ------------------------------------------------------------------
+
+    def _write_raw(self, path, text):
+        # Byte-exact write: CRLF fixtures must survive the rewrite.
+        f = io.open(path, 'w', encoding='utf-8', newline='')
+        try:
+            f.write(text)
+        finally:
+            f.close()
+
+    def _read_raw(self, path):
+        f = io.open(path, 'r', encoding='utf-8', newline='')
+        try:
+            return f.read()
+        finally:
+            f.close()
+
+    def _mint(self, identifier=None):
+        # Run cmd_hash quietly; return its stdout text.
+        out = _capture_stdout()
+        old_out = sys.stdout
+        sys.stdout = out
+        try:
+            todo.cmd_hash(_ns(identifier=identifier, verbose=False))
+        finally:
+            sys.stdout = old_out
+        return _as_text(out)
+
+    def _mint_expecting_failure(self, identifier=None):
+        stderr = _capture_stderr()
+        old_err = sys.stderr
+        sys.stderr = stderr
+        try:
+            with self.assertRaises(SystemExit) as excinfo:
+                todo.cmd_hash(_ns(identifier=identifier, verbose=False))
+        finally:
+            sys.stderr = old_err
+        self.assertEqual(excinfo.exception.code, 1)
+        return _as_text(stderr)
+
+    def test_hash_whole_file_preserves_bytes(self):
+        todo.ensure_environment()
+        self._write_raw(todo.TODO_FILE,
+                        "first manual line\r\n"
+                        "\r\n"
+                        "2026-11-06 already hashed hash:deadbeef\r\n"
+                        "last manual line")
+        out = self._mint()
+        raw = self._read_raw(todo.TODO_FILE)
+        self.assertEqual(raw.count('\r\n'), 3)  # CRLF preserved
+        self.assertTrue(raw.endswith("last manual line hash:" + raw.rsplit('hash:', 1)[1]))
+        lines = raw.split('\r\n')
+        self.assertEqual(lines[1], "")  # blank line untouched
+        self.assertEqual(lines[2], "2026-11-06 already hashed hash:deadbeef")
+        for idx in (0, 3):
+            self.assertIsNotNone(todo._hash_of_line(lines[idx]),
+                                 "line {} not minted: {!r}".format(idx + 1, lines[idx]))
+            self.assertTrue(lines[idx].endswith(todo.HASH_IN_LINE_RE.search(lines[idx]).group(0)))
+        self.assertIn("Minted 2 hash(es)", out)
+        # The derived title is unchanged: hash appended at end of line.
+        self.assertEqual(todo._title_from_line(lines[0]), "first manual line")
+
+    def test_hash_idempotent_rerun_writes_nothing(self):
+        todo.ensure_environment()
+        self._write_raw(todo.TODO_FILE, "manual line one\r\nmanual line two\r\n")
+        self._mint()
+        after_first = self._read_raw(todo.TODO_FILE)
+        self.assertEqual(after_first.count("hash:"), 2)
+        out = self._mint()
+        self.assertIn("nothing to mint", out)
+        self.assertEqual(self._read_raw(todo.TODO_FILE), after_first)
+
+    def test_hash_targeted_line_number_and_title(self):
+        todo.ensure_environment()
+        self._write_raw(todo.TODO_FILE,
+                        "alpha manual line\r\n"
+                        "beta manual line\r\n"
+                        "2026-11-06 hashed line hash:deadbeef\r\n")
+        self._mint(identifier="1")
+        lines = self._read_raw(todo.TODO_FILE).split('\r\n')
+        self.assertTrue(lines[0].startswith("alpha manual line hash:"))
+        self.assertIsNone(todo._hash_of_line(lines[1]))
+        # Title substring, restricted to Unhashed Lines.
+        self._mint(identifier="BETA manual")
+        lines = self._read_raw(todo.TODO_FILE).split('\r\n')
+        self.assertTrue(lines[1].startswith("beta manual line hash:"))
+        self.assertEqual(lines[2], "2026-11-06 hashed line hash:deadbeef")
+
+    def test_hash_targeted_already_hashed_errors(self):
+        self._add("Hashed already")
+        h = self._extract_hash_from_todo()
+        err = self._mint_expecting_failure(identifier="1")
+        self.assertIn("already has hash:" + h, err)
+        # Title of a hashed line is not a mint candidate either.
+        err = self._mint_expecting_failure(identifier="Hashed already")
+        self.assertIn("no Unhashed Line matching", err)
+
+    def test_hash_collision_retries(self):
+        todo.ensure_environment()
+        # 'deadbeef' is already taken by a hashed line: the fake generator
+        # returns it twice before a free one, exercising the retry loop.
+        self._write_raw(todo.TODO_FILE,
+                        "2026-11-06 hashed line hash:deadbeef\r\nmanual line\r\n")
+        real_generate = todo.generate_hash
+        seq = ['deadbeef', 'deadbeef', 'feedface']
+        calls = []
+
+        def fake_generate(title):
+            value = seq[min(len(calls), len(seq) - 1)]
+            calls.append(value)
+            return value
+
+        todo.generate_hash = fake_generate
+        try:
+            out = self._mint()
+        finally:
+            todo.generate_hash = real_generate
+        self.assertEqual(len(calls), 3)  # two collisions, then a free hash
+        self.assertIn("feedface", out)
+        minted_line = self._read_raw(todo.TODO_FILE).splitlines()[1]
+        self.assertEqual(todo._hash_of_line(minted_line), "feedface")
+
+    def test_mint_hash_unique_fails_loudly_after_ten_tries(self):
+        real_generate = todo.generate_hash
+        calls = []
+
+        def fake_generate(title):
+            calls.append(title)
+            return 'deadbeef'
+
+        todo.generate_hash = fake_generate
+        stderr = _capture_stderr()
+        old_err = sys.stderr
+        sys.stderr = stderr
+        try:
+            with self.assertRaises(SystemExit) as excinfo:
+                todo.mint_hash_unique("title", ['deadbeef'])
+        finally:
+            todo.generate_hash = real_generate
+            sys.stderr = old_err
+        self.assertEqual(excinfo.exception.code, 1)
+        self.assertEqual(len(calls), todo.MINT_ATTEMPTS)
+        self.assertIn("could not mint a unique hash", _as_text(stderr))
+
+
 if __name__ == '__main__':
     unittest.main()
