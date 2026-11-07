@@ -1,0 +1,1 @@
+AGENTS.md contains typos: 'compatable' (compatible), 'libaries' (libraries). Also inconsistent capitalization in rule lines. Non-urgent; docs-only.

@@ -44,6 +44,18 @@ convention: `docs/plans/README.md`.
 - When writing or editing either, prefer the domain-modeling skill
   (config/skills/domain-modeling/) - it carries the exact formats.
 
+## Issue tracker filing (policy only; syntax lives in README.md)
+
+- File deferred or observed work as tracker issues via
+  `todo.py add '<title>' -d '<details>'` - including meta-tasks about the
+  project itself (docs, process), not only code bugs.
+- Always pass `-d`: never leave a stub issue.md. The body must contain
+  enough for a stranger to act on it (what/why, repro or spawn source,
+  references to plan/ADR/issue hashes).
+- Tag issues with `--project` and `--context` where applicable.
+- Resolve issues by identifier per docs/adr/0002; prefer the explicit
+  `hash:<hex>` form in scripts and docs.
+
 Respond in English unless the user explicitly requests otherwise
 
 Use python3 to invoke this project (not `py -3` and not `python`), if that fails use `py -3`.
