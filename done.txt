@@ -1,3 +1,6 @@
 x 2026-11-06 (B) 2026-11-06 Smoke test issue hash:e712b791
 x 2026-11-06 2026-11-06 edit doesn't work hash:ebf600f0
 x 2026-11-06 2026-11-06 noisy tests hash:aa5300d9
+x 2026-11-06 2026-11-06 No-dir issue CLI smoke hash:549da53d
+x 2026-11-06 2026-11-06 Fresh no-dir smoke hash:be6c93dc
+x 2026-11-06 2026-11-06 Desc issue smoke hash:dc0ab4a1

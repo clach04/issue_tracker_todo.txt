@@ -114,17 +114,56 @@ class TestLocalIssueTracker(unittest.TestCase):
 
         issue_dir = os.path.join(todo.ISSUES_DIR, issue_hash)
         self.assertTrue(os.path.isdir(issue_dir))
-        self.assertTrue(os.path.isdir(os.path.join(issue_dir, 'comments')))
-        self.assertTrue(os.path.isdir(os.path.join(issue_dir, 'attachments')))
+        # comments/ and attachments/ are created lazily, never at add time.
+        self.assertFalse(os.path.exists(os.path.join(issue_dir, 'comments')))
+        self.assertFalse(os.path.exists(os.path.join(issue_dir, 'attachments')))
 
         issue_md_path = os.path.join(issue_dir, 'issue.md')
         self.assertTrue(os.path.exists(issue_md_path))
         self.assertIn("Users receive a 500 error", self._read(issue_md_path))
 
+    def test_add_without_description_creates_no_dir(self):
+        issue_hash = self._add("Stub only issue")
+        issue_dir = os.path.join(todo.ISSUES_DIR, issue_hash)
+        self.assertFalse(os.path.exists(issue_dir))
+        # Still resolvable and listable.
+        self.assertEqual(todo.resolve_identifier(_ns(identifier="hash:"+issue_hash, verbose=False),
+                                                 "hash:"+issue_hash), issue_hash)
+
+    def test_comment_bootstraps_issue_dir(self):
+        issue_hash = self._add("Lazy dir issue")
+        self.assertFalse(os.path.exists(os.path.join(todo.ISSUES_DIR, issue_hash)))
+        todo.cmd_comment(_ns(identifier="hash:"+issue_hash, text="bootstrap comment"))
+        comments_dir = os.path.join(todo.ISSUES_DIR, issue_hash, 'comments')
+        self.assertEqual(os.listdir(comments_dir), [os.listdir(comments_dir)[0]])
+        self.assertTrue(os.listdir(comments_dir)[0].endswith('.md'))
+
+    def test_edit_bootstraps_issue_dir(self):
+        self._add("Bootstrap edit issue")
+        issue_hash = self._extract_hash_from_todo()
+        self.assertFalse(os.path.exists(os.path.join(todo.ISSUES_DIR, issue_hash)))
+        calls = []
+
+        def fake_call(cmd):
+            calls.append(cmd)
+            return 0
+
+        old_call = todo.subprocess.call
+        todo.subprocess.call = fake_call
+        try:
+            todo.cmd_edit(_ns(identifier="hash:"+issue_hash, verbose=False))
+        finally:
+            todo.subprocess.call = old_call
+        self.assertEqual(len(calls), 1)
+        issue_md = calls[0][1]
+        self.assertTrue(issue_md.endswith('issue.md'))
+        body = self._read(issue_md)
+        self.assertIn("Bootstrap edit issue", body)  # title stub written
+
     def test_comment_issue(self):
         issue_hash = self._add("Refactor database connection pool", priority="B")
 
-        todo.cmd_comment(_ns(identifier=issue_hash,
+        todo.cmd_comment(_ns(identifier="hash:"+issue_hash,
                              text="Investigated connection limits; bumping pool size to 20."))
 
         comments_dir = os.path.join(todo.ISSUES_DIR, issue_hash, 'comments')
@@ -143,7 +182,7 @@ class TestLocalIssueTracker(unittest.TestCase):
         issue_hash = self._add("Update documentation for API endpoints",
                                description="Needs OpenAPI 3.0 spec update.")
 
-        todo.cmd_close(_ns(identifier=issue_hash))
+        todo.cmd_close(_ns(identifier="hash:"+issue_hash))
 
         todo_content = self._read(todo.TODO_FILE)
         self.assertNotIn(issue_hash, todo_content)
@@ -367,7 +406,7 @@ class TestLocalIssueTracker(unittest.TestCase):
         todo.subprocess.call = fake_call
         todo._find_editor = lambda: 'fake_editor'
         try:
-            todo.cmd_edit(_ns(identifier=h, verbose=False))
+            todo.cmd_edit(_ns(identifier="hash:"+h, verbose=False))
         finally:
             todo.subprocess.call = old_call
             todo._find_editor = old_find
@@ -385,7 +424,7 @@ class TestLocalIssueTracker(unittest.TestCase):
         sys.stderr = stderr
         try:
             with self.assertRaises(SystemExit) as excinfo:
-                todo.cmd_edit(_ns(identifier=h, verbose=False))
+                todo.cmd_edit(_ns(identifier="hash:"+h, verbose=False))
         finally:
             todo._find_editor = old_find
             sys.stderr = old_stderr
@@ -398,7 +437,7 @@ class TestLocalIssueTracker(unittest.TestCase):
 
     def test_list_closed(self):
         h = self._add("Closable issue")
-        todo.cmd_close(_ns(identifier=h))
+        todo.cmd_close(_ns(identifier="hash:"+h))
         # cmd_list prints; capture stdout and check done.txt line appears.
         captured = _capture_stderr()
         out = _capture_stdout()
@@ -419,13 +458,13 @@ class TestLocalIssueTracker(unittest.TestCase):
 
     def test_close_twice_errors(self):
         h = self._add("Once only")
-        todo.cmd_close(_ns(identifier=h))
+        todo.cmd_close(_ns(identifier="hash:"+h))
         stderr = _capture_stderr()
         old_stderr = sys.stderr
         sys.stderr = stderr
         try:
             with self.assertRaises(SystemExit) as excinfo:
-                todo.cmd_close(_ns(identifier=h))
+                todo.cmd_close(_ns(identifier="hash:"+h))
         finally:
             sys.stderr = old_stderr
         self.assertEqual(excinfo.exception.code, 1)

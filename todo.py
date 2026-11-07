@@ -82,7 +82,19 @@ def _fail(msg):
 # ---------------------------------------------------------------------------
 
 def _glob_hash_prefix(prefix):
-    return sorted(glob.glob(os.path.join(ISSUES_DIR, "{}*".format(prefix))))
+    # Hash tokens live in todo.txt/done.txt lines; the .issues/<hash>/
+    # directory is lazily created storage and may not exist. Match
+    # against hash: tokens instead of globbing directories.
+    matches = []
+    for filepath in [TODO_FILE, DONE_FILE]:
+        if not os.path.exists(filepath):
+            continue
+        with open(filepath, 'r') as f:
+            for line in f:
+                h = _hash_of_line(line.strip())
+                if h and h.startswith(prefix):
+                    matches.append((h, line.strip()))
+    return matches
 
 def _title_from_line(line):
     parts = line.split()
@@ -116,12 +128,12 @@ def _hash_of_line(line):
         return None
     return m.group(1)
 
-def _fail_ambiguous(token, hash_dirs, title_matches):
+def _fail_ambiguous(token, hash_matches, title_matches):
     print("Error: Ambiguous identifier '{}' matches multiple issues:".format(token), file=sys.stderr)
-    if hash_dirs:
+    if hash_matches:
         print("  hash matches:", file=sys.stderr)
-        for d in hash_dirs:
-            print("    - {}".format(os.path.basename(d)), file=sys.stderr)
+        for h in hash_matches:
+            print("    - {}".format(h), file=sys.stderr)
     if title_matches:
         print("  title matches:", file=sys.stderr)
         for m in title_matches:
@@ -156,11 +168,16 @@ def _resolve_line_number(args, token):
     return h
 
 def _resolve_hash_form(args, prefix, explicit):
-    dirs = _glob_hash_prefix(prefix)
-    if len(dirs) > 1:
-        _fail_ambiguous(prefix, dirs, _title_matches(prefix))
-    if len(dirs) == 1:
-        full_hash = os.path.basename(dirs[0])
+    matches = _glob_hash_prefix(prefix)
+    # Distinct hashes matching this prefix.
+    hashes = []
+    for h, _line in matches:
+        if h not in hashes:
+            hashes.append(h)
+    if len(hashes) > 1:
+        _fail_ambiguous(prefix, hashes, _title_matches(prefix))
+    if len(hashes) == 1:
+        full_hash = hashes[0]
         if not explicit:
             titles = _title_matches(prefix)
             if titles:
@@ -186,24 +203,28 @@ def resolve_identifier(args, token):
 
 # ---------------------------------------------------------------------------
 
+def _ensure_issue_dir(issue_hash):
+    # Lazily create the hash directory; nothing is created for a
+    # description-less issue until a comment, edit, or description exists.
+    issue_dir = os.path.join(ISSUES_DIR, issue_hash)
+    if not os.path.exists(issue_dir):
+        os.makedirs(issue_dir)
+    return issue_dir
+
 def cmd_add(args):
     ensure_environment()
     issue_hash = generate_hash(args.title)
     today = datetime.date.today().isoformat()
 
-    # Create issue directory structure
-    issue_dir = os.path.join(ISSUES_DIR, issue_hash)
-    comments_dir = os.path.join(issue_dir, 'comments')
-    attachments_dir = os.path.join(issue_dir, 'attachments')
-
-    for d in [issue_dir, comments_dir, attachments_dir]:
-        if not os.path.exists(d):
-            os.makedirs(d)
-
-    # Write issue.md body
-    issue_md_path = os.path.join(issue_dir, 'issue.md')
-    with open(issue_md_path, 'w') as f:
-        f.write(args.description or "# {}\n\nNo description provided.\n".format(args.title))
+    # Only a description warrants a Details Directory and issue.md.
+    # Title-only issues index in todo.txt alone; comment/edit bootstrap
+    # the directory lazily.
+    if args.description:
+        issue_dir = _ensure_issue_dir(issue_hash)
+        with open(os.path.join(issue_dir, 'issue.md'), 'w') as f:
+            f.write(args.description)
+    else:
+        _trace(args, "add: no description; no issue dir created for {}".format(issue_hash))
 
     # Format todo.txt line: [priority] [date] [title] hash:<id> [+project] [@context]
     line_parts = []
@@ -267,39 +288,43 @@ def cmd_show(args):
         print("Index Line : {}".format(index_line))
     print("==================================================")
 
-    issue_md_path = os.path.join(issue_dir, 'issue.md')
-    if os.path.exists(issue_md_path):
-        print("\n--- Description ---")
-        with open(issue_md_path, 'r') as f:
-            print(f.read().strip())
-
-    comments_dir = os.path.join(issue_dir, 'comments')
-    comment_files = sorted(glob.glob(os.path.join(comments_dir, '*.md')))
-    if comment_files:
-        print("\n--- Comments ---")
-        for cf in comment_files:
-            c_name = os.path.splitext(os.path.basename(cf))[0]
-            print("\n[{}]".format(c_name))
-            with open(cf, 'r') as f:
+    if os.path.exists(issue_dir):
+        issue_md_path = os.path.join(issue_dir, 'issue.md')
+        if os.path.exists(issue_md_path):
+            print("\n--- Description ---")
+            with open(issue_md_path, 'r') as f:
                 print(f.read().strip())
 
-    attachments_dir = os.path.join(issue_dir, 'attachments')
-    attachments = os.listdir(attachments_dir)
-    if attachments:
-        print("\n--- Attachments ---")
-        for att in attachments:
-            print("  - {}".format(att))
+        comments_dir = os.path.join(issue_dir, 'comments')
+        comment_files = sorted(glob.glob(os.path.join(comments_dir, '*.md')))
+        if comment_files:
+            print("\n--- Comments ---")
+            for cf in comment_files:
+                c_name = os.path.splitext(os.path.basename(cf))[0]
+                print("\n[{}]".format(c_name))
+                with open(cf, 'r') as f:
+                    print(f.read().strip())
+
+        attachments_dir = os.path.join(issue_dir, 'attachments')
+        attachments = os.listdir(attachments_dir) if os.path.isdir(attachments_dir) else []
+        if attachments:
+            print("\n--- Attachments ---")
+            for att in attachments:
+                print("  - {}".format(att))
     print("\n==================================================")
 
 def cmd_comment(args):
     ensure_environment()
     full_hash = resolve_identifier(args, args.identifier)
-    issue_dir = os.path.join(ISSUES_DIR, full_hash)
+    issue_dir = _ensure_issue_dir(full_hash)
+    comments_dir = os.path.join(issue_dir, 'comments')
+    if not os.path.exists(comments_dir):
+        os.makedirs(comments_dir)
 
     # UTC timestamp, seconds precision, one format, no collision handling.
     timestamp = _utcnow().strftime('%Y%m%d_%H%M%S')
     comment_filename = "{}.md".format(timestamp)
-    comment_path = os.path.join(issue_dir, 'comments', comment_filename)
+    comment_path = os.path.join(comments_dir, comment_filename)
 
     with open(comment_path, 'w') as f:
         f.write(args.text + "\n")
@@ -374,7 +399,15 @@ def _find_editor():
 def cmd_edit(args):
     ensure_environment()
     full_hash = resolve_identifier(args, args.identifier)
-    issue_md_path = os.path.join(ISSUES_DIR, full_hash, 'issue.md')
+    # Bootstrap: a description-less issue has no Details Directory yet;
+    # editing is exactly when the description gets written.
+    issue_dir = _ensure_issue_dir(full_hash)
+    issue_md_path = os.path.join(issue_dir, 'issue.md')
+    if not os.path.exists(issue_md_path):
+        with open(issue_md_path, 'w') as f:
+            line = find_line_by_hash(TODO_FILE, full_hash) or find_line_by_hash(DONE_FILE, full_hash)
+            title = _title_from_line(line) if line else full_hash
+            f.write("# {}\n".format(title))
 
     editor = _find_editor()
     if not editor:

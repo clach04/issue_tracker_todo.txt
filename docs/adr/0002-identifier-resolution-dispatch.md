@@ -16,10 +16,11 @@ Dispatch order, tried in sequence:
    included). If the line does not exist: error loudly with a
    `hash:<hex>` hint. **Never falls through to hash lookup.**
 3. **Hex-like token** (`^[0-9a-fA-F]+$`, case-insensitive, not
-   all-digits) - tries hash prefix first (glob in Details Directory),
-   then title substring. When a hash matches, resolution ends and a
-   "resolved via hash" note is printed **always** (not only under
-   `--verbose`).
+   all-digits) - tries hash prefix first (hash: tokens in `todo.txt` /
+   `done.txt` lines; the Details Directory is lazily created storage and
+   may not exist), then title substring. When a hash matches, resolution
+   ends and a "resolved via hash" note is printed **always** (not only
+   under `--verbose`).
 4. **Any other token** - case-insensitive substring match against
    **active** `todo.txt` titles only (not `done.txt`). Multiple matches
    error loudly listing all matches (both hashes and titles, so the user

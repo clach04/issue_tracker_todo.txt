@@ -11,10 +11,12 @@ Designed for developers who want a fast, grep-friendly, dependency-free tracker 
   - **Standard Library Only**: Written in pure Python, compatible with both **Python 2 (2.7+)** and **Python 3**. No external dependencies required!
   - **`todo.txt` Compatible Index**: Open tasks live in a human-readable `todo.txt` file at your repo root, extended with clean custom metadata (`hash:ABC12345`).
   - **Automatic Archiving**: Closed issues migrate automatically from `todo.txt` to `done.txt`, keeping your active view clean and lightweight.
-  - **Rich Flat-File Details**: Every issue gets its own sibling `.issues/<hash>/` directory containing:
+  - **Rich Flat-File Details**: Issues with a description get a sibling `.issues/<hash>/` directory:
     - `issue.md`: The primary issue body/description.
-    - `comments/`: Chronological comment markdown files named with ISO timestamps (`YYYYMMDD_HHMM.md`).
+    - `comments/`: Chronological comment markdown files named with UTC timestamps (`YYYYMMDD_HHMMSS.md`). Created on first comment.
     - `attachments/`: A dedicated folder for screenshots, logs, or associated files.
+
+    Title-only issues (added without `-d`) live in `todo.txt` alone until their first comment or `edit`, which lazily creates the directory.
 
 ---
 
@@ -39,7 +41,7 @@ Here is a breakdown of the key-value pairs and metadata tags utilized by the loc
 +-- done.txt                # Archived/completed issues
 +-- todo.py                 # Core CLI script
 +-- test_todo.py            # Standard library test suite
-+-- .issues/
++-- .issues/                # Created lazily, per issue with details
     +-- a1b2c3d4/           # Unique issue hash directory
         +-- issue.md        # Extended description
         +-- comments/       # 20261106_2130.md
