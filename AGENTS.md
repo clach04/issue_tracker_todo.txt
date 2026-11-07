@@ -8,7 +8,7 @@ Allow non-ASCII only when the file's data semantics require it
 (e.g., person/place names, translations, fixtures, external-source text).
 Do not alter existing non-ASCII data unless explicitly asked.
 
-Write Python 3 and 2 compatable code using stdlib, if you need external libaries discuss, before using.
+Write Python 3 and 2 compatible code using stdlib, if you need external libraries discuss, before using.
 
 Be ultra-concise and precise across all outputs. Prefer brevity over grammar.
 

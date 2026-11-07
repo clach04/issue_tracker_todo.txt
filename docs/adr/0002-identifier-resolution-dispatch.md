@@ -11,10 +11,16 @@ Dispatch order, tried in sequence:
 
 1. **`hash:<hex>`** - explicit form, prefix allowed. Unambiguous by
    construction; always wins over any other interpretation.
-2. **All-digits token** - always an **Index line number** (1-based into
+2. **All-digits token** - an **Index line number** (1-based into
    `todo.txt`, matching exactly what `list` prints, blank lines
-   included). If the line does not exist: error loudly with a
-   `hash:<hex>` hint. **Never falls through to hash lookup.**
+   included) **if the number is in range**. If the number is out of
+   range (todo.txt stays small by design), the token is not a line
+   number: fall through to the hash-prefix path, then title matching.
+   (Refined 2026-11-07: the original rule errored loudly on out-of-range
+   numbers with a `hash:<hex>` hint; the user's observation that line
+   numbers only exist in a small list made the fall-through safe - a
+   typo'd line number is always out of range, so no silent misrouting
+   is possible.)
 3. **Hex-like token** (`^[0-9a-fA-F]+$`, case-insensitive, not
    all-digits) - tries hash prefix first (hash: tokens in `todo.txt` /
    `done.txt` lines; the Details Directory is lazily created storage and
@@ -35,8 +41,12 @@ post-resolution validation (e.g. `close` requires the Issue to be in
 - **Length split** (digits < 5 = line number, 5+ = hash): rejected.
   Hashes are fixed 8 hex chars, so 5-6 digit tokens can still be hash
   *prefixes*; the split would misread long line numbers in large lists.
-- **Fall through to hash on missing line number**: rejected. "I typo'd
-  line 999" would silently resolve to hash `999a...`. Fail fast instead.
+- **Fall through to hash on missing line number**: originally rejected
+  ("I typo'd line 999" would silently resolve to hash `999a...`), then
+  accepted 2026-11-07 in a refined form: out-of-range *all-digit* tokens
+  fall through. The original concern was unfounded because a typo'd line
+  number is always out of range (todo.txt stays small), so the
+  fall-through is safe by construction.
 - **Dual-match ambiguity check** (all-digits token matching both a line
   and a hash prefix): dropped as dead code. Users never type bare
   all-digit hashes; the explicit `hash:` form covers that case.
@@ -45,9 +55,9 @@ post-resolution validation (e.g. `close` requires the Issue to be in
 
 ## Consequences
 
-- **Residual edge, accepted**: a digit-only title (e.g. "12345") is
-  unreachable by bare token; it resolves only via `hash:<hex>`.
-  Rejecting digit-only titles at creation time was declined.
+- **Residual edge, resolved**: a digit-only title (e.g. "12345") is
+  reachable by bare token when the number is out of range (fall-through
+  to hash then title), and always via `hash:<hex>`.
 - ~1 in 43 hashes is all decimal digits (8 hex chars); this is invisible
   under the bare-token rule because those hashes are only ever addressed
   via `hash:<hex>`.

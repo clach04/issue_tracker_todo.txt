@@ -9,7 +9,7 @@ A distinct unit of work, bug report, or task tracked within the local repository
 _Avoid_: Ticket, item, bug
 
 **Index**:
-The root `todo.txt` file tracking all open tasks and their core properties in a single line per issue.
+The root `todo.txt` file tracking all open tasks and their core properties in a single line per issue. By design small: a token too large to be an Index line number is not an Index.
 _Avoid_: Database, manifest, registry
 
 **Details Directory**:
@@ -17,7 +17,7 @@ The sibling `.issues/<hash>/` directory storing the primary markdown body, times
 _Avoid_: Payload folder, blob store
 
 **Identifier**:
-A single token given to an issue command that resolves to exactly one Issue. May be an Index line number, a hash prefix, a title fragment, or an Explicit Hash Form.
+A single token given to an issue command that resolves to exactly one Issue. May be an in-range Index line number, a hash prefix, a title fragment, or an Explicit Hash Form.
 _Avoid_: ID, key, reference
 
 **Explicit Hash Form**:

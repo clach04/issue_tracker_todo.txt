@@ -159,7 +159,10 @@ def _resolve_line_number(args, token):
     with open(TODO_FILE, 'r') as f:
         lines = f.readlines()
     if n < 1 or n > len(lines):
-        _fail("no line {} in {} (1..{}); for hashes use hash:<hex>".format(n, TODO_FILE, len(lines)))
+        # Out of range: token is not a line number (todo.txt stays small).
+        # Caller falls through to hash then title lookup.
+        _trace(args, "resolve: '{}' out of range (1..{}); not a line number".format(token, len(lines)))
+        return None
     line = lines[n - 1].strip()
     h = _hash_of_line(line)
     if not h:
@@ -196,7 +199,15 @@ def resolve_identifier(args, token):
     if token.startswith('hash:'):
         return _resolve_hash_form(args, token[len('hash:'):], explicit=True)
     if DIGITS_RE.match(token):
-        return _resolve_line_number(args, token)
+        # In-range all-digit tokens are Index line numbers. Out-of-range
+        # (todo.txt is small) means 'not a line number': fall through to
+        # hash prefix, then title (ADR-0002).
+        resolved = _resolve_line_number(args, token)
+        if resolved is not None:
+            return resolved
+        if HEX_RE.match(token):
+            return _resolve_hash_form(args, token, explicit=False)
+        return _pick_title_match(args, token, _title_matches(token))
     if HEX_RE.match(token):
         return _resolve_hash_form(args, token, explicit=False)
     return _pick_title_match(args, token, _title_matches(token))

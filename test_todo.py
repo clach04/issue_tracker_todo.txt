@@ -220,8 +220,16 @@ class TestLocalIssueTracker(unittest.TestCase):
         self.assertEqual(todo.resolve_identifier(_ns(identifier="1", verbose=False), "1"), h2)
         self.assertEqual(todo.resolve_identifier(_ns(identifier="2", verbose=False), "2"), h1)
 
-    def test_resolve_line_number_out_of_range_errors(self):
+    def test_resolve_line_number_out_of_range_falls_through(self):
+        # Out-of-range all-digit token: not a line number (todo.txt is
+        # small), so fall through to hash then title (ADR-0002).
         self._add("Only issue")
+        h = self._extract_hash_from_todo()
+        if todo.HEX_RE.match(h):
+            # Bare token only reaches the hash path when not all-digits;
+            # the all-digits case is covered by the explicit-hash tests.
+            self.assertEqual(todo.resolve_identifier(
+                _ns(identifier="hash:" + h, verbose=False), "hash:" + h), h)
         stderr = _capture_stderr()
         old_stderr = sys.stderr
         sys.stderr = stderr
@@ -232,8 +240,8 @@ class TestLocalIssueTracker(unittest.TestCase):
             sys.stderr = old_stderr
         self.assertEqual(excinfo.exception.code, 1)
         out = _as_text(stderr)
-        self.assertIn("no line 99", out)
-        self.assertIn("hash:<hex>", out)  # hint present, no hash fall-through
+        self.assertIn("no issue found matching", out.lower())  # hash+title miss
+        self.assertIn("hash prefix or title '99'", out)  # fell through both
 
     def test_resolve_explicit_hash_prefix(self):
         self._add("Unique issue title")
@@ -287,22 +295,33 @@ class TestLocalIssueTracker(unittest.TestCase):
         self.assertIn("Fix login page", out)
         self.assertIn("hash:", out)  # both hashes listed with titles
 
-    def test_resolve_digit_only_title_unreachable_bare(self):
+    def test_resolve_digit_only_title_reachable_via_fallthrough(self):
+        # Out-of-range all-digit token falls through to hash then title
+        # (ADR-0002), so a digit-only title like '12345' is now reachable
+        # by bare token when the line number is out of range.
         self._add("12345")
         stderr = _capture_stderr()
         old_stderr = sys.stderr
         sys.stderr = stderr
         try:
             with self.assertRaises(SystemExit) as excinfo:
-                todo.resolve_identifier(_ns(identifier="12345", verbose=False), "12345")
+                todo.resolve_identifier(_ns(identifier="99", verbose=False), "99")
         finally:
             sys.stderr = old_stderr
-        self.assertEqual(excinfo.exception.code, 1)  # line 12345 doesn't exist
+        self.assertEqual(excinfo.exception.code, 1)  # no line 99, no hash, no title
 
-        # Reachable via explicit hash form.
+        # Reachable via explicit hash form always.
         h = self._extract_hash_from_todo()
         resolved = todo.resolve_identifier(_ns(identifier="hash:" + h, verbose=False),
                                            "hash:" + h)
+        self.assertEqual(resolved, h)
+
+        # Reachable by bare token via the out-of-range fall-through.
+        # '12345' is out of range (1 issue in todo.txt), so it resolves
+        # as a hash prefix or title.
+        bare = "12345" if todo.HEX_RE.match(h) else "99999"
+        resolved = todo.resolve_identifier(_ns(identifier=bare, verbose=False), bare)
+        self.assertEqual(resolved, h)
         self.assertEqual(resolved, h)
 
     def test_resolve_hex_wins_over_title_prints_note(self):
