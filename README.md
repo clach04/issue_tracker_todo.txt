@@ -62,9 +62,11 @@ Consequences:
   * The hash is not a function of the title alone: adding the same
     title twice yields two different hashes. It is also independent of
     the line number, so reordering `todo.txt` renames nothing.
-  * An 8-char prefix is 32 bits of digest space. Collisions are neither
-    detected nor resolved, so no uniqueness check is performed; the
-    timestamp makes them practically impossible for distinct issues.
+  * An 8-char prefix is 32 bits of digest space, so collisions are
+    possible in principle. Every minting path (`add`, `hash`, and the
+    close-time mint) retries against the hashes already present in
+    `todo.txt` and `done.txt`, and fails loudly after 10 tries, so a
+    duplicate token can never enter the Index.
   * Hashes are not reproducible (local clock, microsecond resolution)
     and nothing re-derives them: the `hash:` token in the Index, or in
     `done.txt` after closing, is the only record.
@@ -95,7 +97,7 @@ todo.py hash "some title"    # one line, by title substring
   ambiguous title match among Unhashed Lines.
 - Minted hashes are retried until unique across the hashes in
   `todo.txt` and `done.txt` (10 tries), then the command fails loudly.
-  `add` does not yet do this (close-time minting does).
+  `add` and the close-time mint do the same.
 - `todo.txt` only: `done.txt` has no backfill yet. No `.issues/<hash>/`
   directory is created - a repaired line stays title-only, and the
   directory appears on the first comment or `edit`.

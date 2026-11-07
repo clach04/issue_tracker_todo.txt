@@ -45,9 +45,10 @@ path was needed that does not make read-only commands write.
 
 ## Consequences
 
-- `hash` and close-time minting are deliberately **stricter than
-  `add`**: `add` still mints unchecked hashes. Tracked as its own issue; until then the two
-  minting paths disagree on collision safety.
+- The collision guard started as `hash`-only, leaving `add` minting
+  unchecked (a deliberate, temporary inconsistency). `add` has since
+  adopted the same `mint_hash_unique` retry, so all three minting paths
+  (`add`, `hash`, close-time) now agree.
 - Appending means a minted line's hash is not in the canonical
   position, so `add`-created and repaired lines look different. Text
   searching for `hash:` is the only property the tool relies on, so

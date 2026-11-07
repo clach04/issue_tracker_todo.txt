@@ -130,6 +130,84 @@ class TestLocalIssueTracker(unittest.TestCase):
         self.assertEqual(todo.resolve_identifier(_ns(identifier="hash:"+issue_hash, verbose=False),
                                                  "hash:"+issue_hash), issue_hash)
 
+    # add: collision-guarded minting (ADR-0003)
+    # ------------------------------------------------------------------
+
+    def _add_capture(self, title, **kw):
+        # Like _add, but returns (minted_hash, stderr_text, excinfo_code).
+        args = _ns(title=title, description=kw.get('description'),
+                   priority=kw.get('priority'), project=kw.get('project'),
+                   context=kw.get('context'))
+        old_out, old_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = _capture_stdout(), _capture_stderr()
+        err = sys.stderr
+        try:
+            todo.cmd_add(args)
+            code = 0
+        except SystemExit as exc:
+            code = exc.code
+        finally:
+            sys.stdout, sys.stderr = old_out, old_err
+        return _as_text(err), code
+
+    def _add_with_fake_generate(self, title, seq):
+        # Patch generate_hash to walk 'seq'; returns (stderr, code, calls).
+        real_generate = todo.generate_hash
+        calls = []
+
+        def fake_generate(t):
+            value = seq[min(len(calls), len(seq) - 1)]
+            calls.append(value)
+            return value
+
+        todo.generate_hash = fake_generate
+        try:
+            err, code = self._add_capture(title)
+        finally:
+            todo.generate_hash = real_generate
+        return err, code, calls
+
+    def test_add_retries_on_hash_collision(self):
+        todo.ensure_environment()
+        # 'deadbeef' already taken in todo.txt; the collision must be
+        # retried, not silently aliased.
+        self._write_raw(todo.TODO_FILE, "2026-11-06 taken hash:deadbeef\n")
+        err, code, calls = self._add_with_fake_generate(
+            "Fresh issue", ['deadbeef', 'deadbeef', 'feedface'])
+        self.assertEqual(code, 0, "unexpected failure: {!r}".format(err))
+        self.assertEqual(len(calls), 3, "expected 2 collisions + 1 free mint")
+        lines = self._read_raw(todo.TODO_FILE).splitlines()
+        self.assertEqual(len(lines), 2, "expected exactly one added line")
+        # add prepends: the new issue is line 1, the fixture line 2.
+        self.assertEqual(todo._hash_of_line(lines[0]), "feedface",
+                         "add must store the first unique candidate")
+        self.assertEqual(todo._hash_of_line(lines[1]), "deadbeef",
+                         "the existing line must be untouched")
+
+    def test_add_retries_on_hash_collision_in_done_file(self):
+        todo.ensure_environment()
+        # done.txt counts too: a hash reused after closing must not alias.
+        self._write_raw(todo.DONE_FILE, "x 2026-11-06 old hash:cafebabe\n")
+        err, code, calls = self._add_with_fake_generate(
+            "Fresh issue", ['cafebabe', 'beefcafe'])
+        self.assertEqual(code, 0, "unexpected failure: {!r}".format(err))
+        self.assertEqual(len(calls), 2, "done.txt hash was not treated as taken")
+        line = self._read_raw(todo.TODO_FILE).splitlines()[0]
+        self.assertEqual(todo._hash_of_line(line), "beefcafe")
+
+    def test_add_fails_loudly_after_ten_collisions(self):
+        todo.ensure_environment()
+        self._write_raw(todo.TODO_FILE, "2026-11-06 taken hash:deadbeef\n")
+        err, code, calls = self._add_with_fake_generate("Doomed issue", ['deadbeef'])
+        self.assertEqual(code, 1, "add must fail loudly on persistent collision")
+        self.assertEqual(len(calls), todo.MINT_ATTEMPTS)
+        self.assertIn("could not mint a unique hash", err)
+        # Fail fast: nothing was written and no orphan details dir exists.
+        lines = self._read_raw(todo.TODO_FILE).splitlines()
+        self.assertEqual(lines, ["2026-11-06 taken hash:deadbeef"])
+        self.assertFalse(os.path.exists(os.path.join(todo.ISSUES_DIR, "deadbeef")),
+                         "failed add must not leave a details directory")
+
     def test_comment_bootstraps_issue_dir(self):
         issue_hash = self._add("Lazy dir issue")
         self.assertFalse(os.path.exists(os.path.join(todo.ISSUES_DIR, issue_hash)))

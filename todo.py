@@ -56,8 +56,8 @@ MINT_ATTEMPTS = 10
 def mint_hash_unique(title, taken):
     """Mint a hash not in 'taken' (iterable of short hashes).
 
-    ADR-0003: 'hash' and close-time minting retry on collision; 'add'
-    still mints unchecked (tracked as a tracker issue).
+    ADR-0003: every minting path ('add', 'hash', close-time) retries
+    until the hash is unique across todo.txt and done.txt.
     """
     for _attempt in range(MINT_ATTEMPTS):
         candidate = generate_hash(title)
@@ -249,7 +249,9 @@ def _ensure_issue_dir(issue_hash):
 
 def cmd_add(args):
     ensure_environment()
-    issue_hash = generate_hash(args.title)
+    # ADR-0003: add mints with the same uniqueness retry as 'hash' and
+    # close-time minting. 'taken' must be read before the new line exists.
+    issue_hash = mint_hash_unique(args.title, _all_hash_tokens())
     today = datetime.date.today().isoformat()
 
     # Only a description warrants a Details Directory and issue.md.
