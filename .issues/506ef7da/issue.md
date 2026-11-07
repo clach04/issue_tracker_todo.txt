@@ -1,0 +1,1 @@
+EDITOR values with arguments (e.g. 'code -w') are not supported in cmd_edit; the whole value is treated as one executable name (TODO at todo.py:383). Spawned from docs/plans/initial.md.

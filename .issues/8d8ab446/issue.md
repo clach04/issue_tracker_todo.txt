@@ -1,0 +1,1 @@
+list --sort <date|priority|hash> is specified in docs/plans/initial.md but was deferred during the 2026-11-06 grill session. Spawned from docs/plans/initial.md.

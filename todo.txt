@@ -1,0 +1,3 @@
+(C) 2026-11-06 Evaluate detached-worktree git strategy hash:d252c7a2 +trackertool @idea
+(C) 2026-11-06 Implement list --sort hash:8d8ab446 +trackertool @feature
+(C) 2026-11-06 Support EDITOR values containing arguments hash:506ef7da +trackertool @techdebt

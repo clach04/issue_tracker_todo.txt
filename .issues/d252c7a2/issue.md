@@ -1,0 +1,1 @@
+Idea from git-issue PR #100: keep .issues/ in a detached git worktree so issues can be edited without touching the main working tree. Deferred during the 2026-11-06 grill session; not designed yet. Currently .issues/, todo.txt, done.txt are plain tracked files.
