@@ -24,6 +24,24 @@ Designed for developers who want a fast, grep-friendly, dependency-free tracker 
 
 ---
 
+## Index order
+
+`todo.txt` is **chronological**: `add` appends, exactly as `close`
+appends to `done.txt` (ADR-0004).
+
+- **Line numbers are stable for life.** A number copied from any `list`
+  output addresses the same Index line forever; a later `add` never
+  renumbers an existing issue.
+- `add` prints the new number:
+  `Created issue [<hash>] at line N: '<title>'`.
+- A `todo.txt` written before this change is reverse-chronological (the
+  old `add` prepended). No migration is needed: `--reverse` reads such a
+  file oldest-first, and new issues simply append below the old ones.
+- Display order may differ from Index order once `--sort` or
+  `--reverse` are used, but every printed row keeps its **true Index
+  line number**, so sorted output is visibly non-monotonic. The number
+  always means "the Index line", never "the row on screen".
+
 ## todo.txt key value pairs
 
 Here is a breakdown of the key-value pairs and metadata tags utilized by the local issue tracker's extended `todo.txt` format:

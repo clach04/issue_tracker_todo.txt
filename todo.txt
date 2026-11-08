@@ -1,3 +1,6 @@
+2026-11-07 TODO: -s short flag for --sort, revisit after real use hash:50000d8e +trackertool @feature
+2026-11-07 archived lines deviate from todo.txt token order: (P) after x <date>, titles unparsable hash:b8480e3f +trackertool @techdebt
+2026-11-07 add prepends to todo.txt, so every add renumbers the Index hash:6fdb5271 +trackertool @techdebt
 (C) 2026-11-07 no backfill path for done.txt (hash --closed deferred) hash:b6e88862 +trackertool @feature
 (C) 2026-11-06 Evaluate detached-worktree git strategy hash:d252c7a2 +trackertool @idea
 (C) 2026-11-06 Implement list --sort hash:8d8ab446 +trackertool @feature
@@ -8,3 +11,4 @@ document common tags, `@techdebt` something new for docs hash:ae89067d
 review all ADRs for future todo ideas not captured in task list hash:448315fe
 add support to import from exported GitHub issues @feature
 add support to sync with GitHub issues @feature
+2026-11-07 sanity check AGENTS.md directives for todo in multiple models hash:4db29c8a

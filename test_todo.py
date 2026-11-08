@@ -13,6 +13,7 @@ import tempfile
 import argparse
 import unittest
 import datetime
+import re
 
 import todo
 
@@ -73,8 +74,10 @@ class TestLocalIssueTracker(unittest.TestCase):
         shutil.rmtree(self.test_dir)
 
     def _extract_hash_from_todo(self):
+        # ADR-0004: `add` appends, so the newest issue is the LAST line.
         with open(todo.TODO_FILE, 'r') as f:
-            line = f.readline().strip()
+            lines = [l.strip() for l in f if l.strip()]
+        line = lines[-1]
         for part in line.split():
             if part.startswith("hash:"):
                 return part.split(":")[1]
@@ -130,6 +133,59 @@ class TestLocalIssueTracker(unittest.TestCase):
         self.assertEqual(todo.resolve_identifier(_ns(identifier="hash:"+issue_hash, verbose=False),
                                                  "hash:"+issue_hash), issue_hash)
 
+    # add: append keeps Index line numbers stable for life (ADR-0004)
+    # ------------------------------------------------------------------
+
+    def _add_reported_line(self, title):
+        # Run cmd_add quietly; return (hash, reported line number, out).
+        out = _capture_stdout()
+        old_out = sys.stdout
+        sys.stdout = out
+        try:
+            todo.cmd_add(_ns(title=title, description=None, priority=None,
+                             project=None, context=None))
+        finally:
+            sys.stdout = old_out
+        text = _as_text(out)
+        m = re.search(r"at line (\d+)", text)
+        self.assertIsNotNone(m, "add must report the new line number: {!r}".format(text))
+        return self._extract_hash_from_todo(), int(m.group(1)), text
+
+    def test_add_appends_and_prints_line_number(self):
+        h1, n1, out1 = self._add_reported_line("First issue")
+        self.assertEqual(n1, 1, "first issue in an empty Index is line 1")
+        self.assertIn("Created issue [{}] at line 1".format(h1), out1)
+        self.assertIn("'First issue'", out1, "add keeps the title in its output")
+        h2, n2, _out2 = self._add_reported_line("Second issue")
+        self.assertEqual(n2, 2, "add appends: the second issue is line 2")
+        lines = self._read_raw(todo.TODO_FILE).splitlines()
+        self.assertIn(h1, lines[0], "the first issue stays on line 1")
+        self.assertIn(h2, lines[1], "the new issue is appended at the end")
+
+    def test_add_does_not_renumber_existing_issues(self):
+        h1, n1, _out = self._add_reported_line("Alpha issue")
+        h2, n2, _out = self._add_reported_line("Beta issue")
+        h3, n3, _out = self._add_reported_line("Gamma issue")
+        self.assertEqual([n1, n2, n3], [1, 2, 3])
+        # The number captured BEFORE the later adds still resolves to the
+        # same hash afterwards: stable for life (ADR-0004).
+        for number, expected in ((1, h1), (2, h2), (3, h3)):
+            resolved = todo.resolve_identifier(
+                _ns(identifier=str(number), verbose=False), str(number))
+            self.assertEqual(resolved, expected,
+                             "line {} must still address the same issue".format(number))
+
+    def test_add_appends_to_file_without_trailing_newline(self):
+        # A hand-written last line with no trailing newline must not be
+        # glued onto the appended line.
+        self._write_raw(todo.TODO_FILE, "manual no newline hash:deadbeef")
+        h, n, _out = self._add_reported_line("Appended issue")
+        self.assertEqual(n, 2, "the unterminated line still occupies line 1")
+        lines = self._read_raw(todo.TODO_FILE).splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[0].endswith("hash:deadbeef"), "line 1 untouched")
+        self.assertIn(h, lines[1])
+
     # add: collision-guarded minting (ADR-0003)
     # ------------------------------------------------------------------
 
@@ -178,10 +234,10 @@ class TestLocalIssueTracker(unittest.TestCase):
         self.assertEqual(len(calls), 3, "expected 2 collisions + 1 free mint")
         lines = self._read_raw(todo.TODO_FILE).splitlines()
         self.assertEqual(len(lines), 2, "expected exactly one added line")
-        # add prepends: the new issue is line 1, the fixture line 2.
-        self.assertEqual(todo._hash_of_line(lines[0]), "feedface",
+        # ADR-0004: add appends: the fixture line is 1, the new one 2.
+        self.assertEqual(todo._hash_of_line(lines[1]), "feedface",
                          "add must store the first unique candidate")
-        self.assertEqual(todo._hash_of_line(lines[1]), "deadbeef",
+        self.assertEqual(todo._hash_of_line(lines[0]), "deadbeef",
                          "the existing line must be untouched")
 
     def test_add_retries_on_hash_collision_in_done_file(self):
@@ -331,9 +387,9 @@ class TestLocalIssueTracker(unittest.TestCase):
     def test_resolve_by_line_number(self):
         h1 = self._add("Alpha issue")
         h2 = self._add("Beta issue")
-        # cmd_add prepends; Beta is line 1, Alpha is line 2.
-        self.assertEqual(todo.resolve_identifier(_ns(identifier="1", verbose=False), "1"), h2)
-        self.assertEqual(todo.resolve_identifier(_ns(identifier="2", verbose=False), "2"), h1)
+        # cmd_add appends (ADR-0004); Alpha is line 1, Beta is line 2.
+        self.assertEqual(todo.resolve_identifier(_ns(identifier="1", verbose=False), "1"), h1)
+        self.assertEqual(todo.resolve_identifier(_ns(identifier="2", verbose=False), "2"), h2)
 
     def test_resolve_line_number_out_of_range_falls_through(self):
         # Out-of-range all-digit token: not a line number (todo.txt is
@@ -461,15 +517,17 @@ class TestLocalIssueTracker(unittest.TestCase):
         # list numbers ALL lines including blanks; resolver must agree.
         h = self._add("Issue after blank")
         with open(todo.TODO_FILE, 'a') as f:
-            f.write("\n")  # trailing blank line occupies line 2
-        self._add("Second issue")  # prepended: now line 1, blank is line 2
+            f.write("\n")  # blank line now occupies line 2
+        self._add("Second issue")  # appended: blank stays at line 2
         lines = self._read(todo.TODO_FILE).splitlines(True)
         self.assertEqual(len(lines), 3)
-        # Second add prepends: line 1 = "Second issue", line 2 =
-        # "Issue after blank", line 3 = the blank line (numbered by list).
-        self.assertIn("Issue after blank", lines[1])
-        self.assertEqual(lines[2].strip(), "")
-        resolved = todo.resolve_identifier(_ns(identifier="2", verbose=False), "2")
+        # ADR-0004 (append): line 1 = "Issue after blank", line 2 = the
+        # blank line (numbered by list), line 3 = "Second issue".
+        self.assertIn("Issue after blank", lines[0])
+        self.assertEqual(lines[1].strip(), "")
+        self.assertIn("Second issue", lines[2])
+        # The blank line does not shift the first issue off line 1.
+        resolved = todo.resolve_identifier(_ns(identifier="1", verbose=False), "1")
         self.assertEqual(resolved, h)
 
     # ------------------------------------------------------------------

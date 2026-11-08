@@ -281,12 +281,21 @@ def cmd_add(args):
 
     new_line = " ".join(line_parts) + "\n"
 
+    # ADR-0004: `add` APPENDS, so Index line numbers are stable for
+    # life. Prepending renumbered every Issue on every add and silently
+    # invalidated any remembered line number.
     with open(TODO_FILE, 'r') as f:
-        content = f.read()
+        existing = f.read()
+    if existing and not existing.endswith('\n'):
+        # Do not glue the new line onto a hand-written last line that
+        # lacks a trailing newline (the read-modify-write keeps bytes).
+        existing += '\n'
     with open(TODO_FILE, 'w') as f:
-        f.write(new_line + content)
+        f.write(existing + new_line)
 
-    print("Created issue [{}] '{}'".format(issue_hash, args.title))
+    # The number is only honest once append made it stable (ADR-0004).
+    line_number = existing.count('\n') + 1
+    print("Created issue [{}] at line {}: '{}'".format(issue_hash, line_number, args.title))
 
 def cmd_list(args):
     ensure_environment()
