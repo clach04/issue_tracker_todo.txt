@@ -701,22 +701,110 @@ class TestLocalIssueTracker(unittest.TestCase):
     # list --closed
     # ------------------------------------------------------------------
 
-    def test_list_closed(self):
-        h = self._add("Closable issue")
-        todo.cmd_close(_ns(identifier="hash:"+h))
-        # cmd_list prints; capture stdout and check done.txt line appears.
-        captured = _capture_stderr()
+    def _list(self, **kw):
+        # Run cmd_list with view flags defaulted; return its stdout text.
+        kw.setdefault('closed', False)
+        kw.setdefault('priority', None)
+        kw.setdefault('sort', None)
+        kw.setdefault('reverse', False)
         out = _capture_stdout()
         old_out = sys.stdout
         sys.stdout = out
         try:
-            todo.cmd_list(_ns(closed=True, priority=None))
+            todo.cmd_list(_ns(**kw))
         finally:
             sys.stdout = old_out
-        text = _as_text(out)
+        return _as_text(out)
+
+    def _rows(self, text):
+        # Parsed (line number, line) view rows, in printed order.
+        rows = []
+        for raw in text.splitlines():
+            m = re.match(r"\s*(\d+): (.*)$", raw)
+            if m:
+                rows.append((int(m.group(1)), m.group(2)))
+        return rows
+
+    def test_list_closed(self):
+        h = self._add("Closable issue")
+        todo.cmd_close(_ns(identifier="hash:"+h))
+        text = self._list(closed=True)
         self.assertIn("Closed", text)
         self.assertIn(h, text)
         self.assertIn("Closable issue", text)
+
+    # ------------------------------------------------------------------
+    # list --sort / --reverse (ADR-0004: view flags, Index order kept)
+    # ------------------------------------------------------------------
+
+    def _seed_sort_rows(self):
+        # Index order (append), deliberately unsorted on both keys.
+        # Priorities present so the priority key has something to order.
+        todo.ensure_environment()
+        self._write_raw(todo.TODO_FILE,
+                        "(C) 2026-11-05 charlie hash:cccccccc\n"
+                        "(A) 2026-11-07 alpha hash:aaaaaaaa\n"
+                        "(B) 2026-11-06 bravo hash:bbbbbbbb\n")
+
+    def test_sort_priority_keeps_true_line_numbers(self):
+        self._seed_sort_rows()
+        rows = self._rows(self._list(sort='priority'))
+        self.assertEqual([n for n, _l in rows], [2, 3, 1],
+                         "A/B/C order; numbers are the TRUE Index lines")
+        self.assertTrue(rows[0][1].startswith("(A)"), "A sorts first")
+        self.assertTrue(rows[2][1].startswith("(C)"), "C sorts last")
+
+    def test_sort_priority_reverse_keeps_buckets_last(self):
+        todo.ensure_environment()
+        self._write_raw(todo.TODO_FILE,
+                        "(C) 2026-11-05 charlie hash:cccccccc\n"
+                        "2026-11-07 unprioritised hash:dddddddd\n"
+                        "(A) 2026-11-07 alpha hash:aaaaaaaa\n")
+        rows = self._rows(self._list(sort='priority', reverse=True))
+        self.assertEqual([n for n, _l in rows], [1, 3, 2],
+                         "reversed sortable block (C,A), unprioritised still last")
+
+    def test_sort_date_and_reverse(self):
+        self._seed_sort_rows()
+        rows = self._rows(self._list(sort='date'))
+        self.assertEqual([n for n, _l in rows], [1, 3, 2], "oldest first")
+        rows = self._rows(self._list(sort='date', reverse=True))
+        self.assertEqual([n for n, _l in rows], [2, 3, 1], "newest first")
+
+    def test_sort_date_buckets_undated_last_under_reverse(self):
+        todo.ensure_environment()
+        self._write_raw(todo.TODO_FILE,
+                        "no date token here hash:dddddddd\n"
+                        "2026-11-07 dated hash:aaaaaaaa\n"
+                        "2026-11-05 older hash:bbbbbbbb\n")
+        self.assertEqual([n for n, _l in self._rows(self._list(sort='date'))],
+                         [3, 2, 1], "undated last going forward")
+        self.assertEqual([n for n, _l in self._rows(self._list(sort='date', reverse=True))],
+                         [2, 3, 1], "undated stays last when reversed")
+
+    def test_sort_tie_break_is_index_order(self):
+        todo.ensure_environment()
+        self._write_raw(todo.TODO_FILE,
+                        "(B) 2026-11-07 first b hash:bbbbbbbb\n"
+                        "(B) 2026-11-07 second b hash:cccccccc\n"
+                        "(A) 2026-11-07 an a hash:aaaaaaaa\n")
+        self.assertEqual([n for n, _l in self._rows(self._list(sort='priority'))],
+                         [3, 1, 2], "equal keys keep Index order")
+
+    def test_reverse_without_sort_reverses_index_order(self):
+        self._seed_sort_rows()
+        self.assertEqual([n for n, _l in self._rows(self._list())], [1, 2, 3])
+        self.assertEqual([n for n, _l in self._rows(self._list(reverse=True))], [3, 2, 1])
+
+    def test_sort_applies_to_closed_list(self):
+        todo.ensure_environment()
+        self._write_raw(todo.DONE_FILE,
+                        "x 2026-11-07 (C) 2026-11-05 older hash:cccccccc\n"
+                        "x 2026-11-07 (A) 2026-11-07 newer hash:aaaaaaaa\n")
+        rows = self._rows(self._list(closed=True, sort='priority'))
+        self.assertEqual([n for n, _l in rows], [2, 1], "A before C in the Archive")
+        rows = self._rows(self._list(closed=True, sort='date', reverse=True))
+        self.assertEqual([n for n, _l in rows], [2, 1], "newest first")
 
     # ------------------------------------------------------------------
     # Close-on-closed remains an error

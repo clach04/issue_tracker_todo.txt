@@ -297,12 +297,73 @@ def cmd_add(args):
     line_number = existing.count('\n') + 1
     print("Created issue [{}] at line {}: '{}'".format(issue_hash, line_number, args.title))
 
+def _archive_body(line):
+    # ADR-0004: an archived line is `x <completion-date> <original line>`.
+    # Strip that prefix so the token scan sees the original line's tokens
+    # in their normal order. (The Archive's priority token position is a
+    # separate, filed bug: hash:b8480e3f.)
+    parts = line.split()
+    if len(parts) >= 3 and parts[0] == 'x' and DATE_RE.match(parts[1]):
+        return ' '.join(parts[2:])
+    return line
+
+def _first_date_token(line):
+    # ADR-0004 date key: first date token, None when the line has none.
+    for part in _archive_body(line).split():
+        if DATE_RE.match(part):
+            return part
+    return None
+
+def _first_priority_token(line):
+    # ADR-0004 priority key: first (A)..(Z) token, None when unprioritised.
+    for part in _archive_body(line).split():
+        if PRIORITY_RE.match(part):
+            return part[1]
+    return None
+
+def _sort_key(sort_field, line):
+    if sort_field == 'date':
+        return _first_date_token(line)
+    if sort_field == 'priority':
+        return _first_priority_token(line)
+    raise ValueError("unsupported sort field {!r} (expected 'date' or 'priority')".format(sort_field))
+
+def _sort_rows(args, rows, sort_field, reverse):
+    """Order (index, line) rows for display only; the file is not written.
+
+    ADR-0004: rows keep their TRUE Index line number, so sorted output is
+    visibly non-monotonic. Rows missing the key form a bucket that stays
+    LAST even under --reverse - only the sortable block is reversed.
+    `rows` arrives in Index order, and the sort is stable, so ties keep
+    Index order in both directions.
+    """
+    if sort_field is None:
+        ordered = list(rows)
+        if reverse:
+            # No key: --reverse alone means reversed Index order.
+            ordered.reverse()
+        _trace(args, "list: {} rows in Index order{}".format(
+            len(ordered), " (reversed)" if reverse else ""))
+        return ordered
+    sortable = []
+    bucket = []
+    for index, line in rows:
+        key = _sort_key(sort_field, line)
+        if key is None:
+            bucket.append((index, line))
+        else:
+            sortable.append((key, index, line))
+    sortable.sort(key=lambda row: row[0], reverse=reverse)
+    _trace(args, "list: sorted {} rows by {}{}, {} bucketed last".format(
+        len(rows), sort_field, " (reversed)" if reverse else "", len(bucket)))
+    return [(index, line) for _key, index, line in sortable] + bucket
+
 def cmd_list(args):
     ensure_environment()
     target_file = DONE_FILE if args.closed else TODO_FILE
     status_label = "Closed" if args.closed else "Open"
 
-    print("\n--- {} Issues ({}) ---\n".format(status_label, target_file))
+    rows = []
     with open(target_file, 'r') as f:
         for idx, line in enumerate(f, 1):
             line = line.strip()
@@ -310,7 +371,12 @@ def cmd_list(args):
                 continue
             if args.priority and "({})".format(args.priority.upper()) not in line:
                 continue
-            print("{:2d}: {}".format(idx, line))
+            rows.append((idx, line))
+    rows = _sort_rows(args, rows, args.sort, args.reverse)
+
+    print("\n--- {} Issues ({}) ---\n".format(status_label, target_file))
+    for idx, line in rows:
+        print("{:2d}: {}".format(idx, line))
     print("")
 
 def find_line_by_hash(filepath, target_hash):
@@ -617,6 +683,11 @@ def main():
     parser_list = subparsers.add_parser('list', parents=[common], help='List issues')
     parser_list.add_argument('--closed', action='store_true', help='List closed issues from done.txt')
     parser_list.add_argument('-p', '--priority', help='Filter by priority', default=None)
+    # ADR-0004: view flags only; the Index file is never rewritten.
+    parser_list.add_argument('--sort', choices=['date', 'priority'], default=None,
+                             help='Sort the displayed rows by date or priority (file order untouched)')
+    parser_list.add_argument('-r', '--reverse', action='store_true', default=False,
+                             help='Reverse the displayed order (with --sort: the sortable block only)')
 
     # show
     parser_show = subparsers.add_parser('show', parents=[common], help='Inspect issue details, description, and comments')

@@ -42,6 +42,42 @@ appends to `done.txt` (ADR-0004).
   line number**, so sorted output is visibly non-monotonic. The number
   always means "the Index line", never "the row on screen".
 
+## Sorting the list
+
+`--sort` and `--reverse`/`-r` reorder the **display only**; the Index
+file is never rewritten (ADR-0004).
+
+```text
+todo.py list                       # Index order (chronological)
+todo.py list --sort priority       # (A)..(Z) first, unprioritised last
+todo.py list --sort date           # oldest first
+todo.py list --sort date -r        # newest first
+todo.py list -r                    # reversed Index order
+todo.py list --closed --sort date  # view flags apply to the Archive too
+```
+
+- Every row keeps its **true Index line number**, so sorted output is
+  visibly non-monotonic (rows print as `2`, `3`, `1`). The number always
+  means the Index line, never the row position.
+- Ties keep Index order (stable sort), in both directions.
+- **`date` key**: the first date token on the line; on an archived line,
+  the first date token after the `x <completion-date>` prefix.
+  *Caveat*: a line with no date token sorts into an **undated bucket
+  that is always last**, so `--sort date -r` is not a byte-for-byte
+  reversal of `--sort date`. Pre-append `todo.txt` files (and every
+  hand-written line) frequently lack a date token.
+- **`priority` key**: `(A)`..`(Z)` in order, unprioritised **last**. A
+  missing priority is not "highest".
+- Buckets (undated, unprioritised) stay last under `--reverse`: only the
+  sortable block is reversed, so `--sort priority -r` still shows
+  prioritised work first.
+- `-r` without `--sort` is just reversed Index order - one rule, no
+  special case. On a pre-append (reverse-chronological) file it is the
+  cheapest way to read oldest-first.
+- There is no `--sort hash`: an 8-hex token has no ordering meaning, and
+  file order already provides a stable arbitrary order. There is no `-s`
+  short flag for `--sort` (deferred, hash:50000d8e).
+
 ## todo.txt key value pairs
 
 Here is a breakdown of the key-value pairs and metadata tags utilized by the local issue tracker's extended `todo.txt` format:
