@@ -16,6 +16,7 @@ import datetime
 import re
 
 import todo
+import md2todo
 
 def _ns(**kw):
     # Construct command args with verbose OFF by default (quiet tests).
@@ -1101,6 +1102,385 @@ class TestLocalIssueTracker(unittest.TestCase):
         self.assertEqual(excinfo.exception.code, 1)
         self.assertEqual(len(calls), todo.MINT_ATTEMPTS)
         self.assertIn("could not mint a unique hash", _as_text(stderr))
+
+
+# ----------------------------------------------------------------------
+# md2todo.py: GFM task list import (ADR-0006, docs/plans/gfm-import.md)
+# ----------------------------------------------------------------------
+
+class TestGfmImport(unittest.TestCase):
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.old_cwd = os.getcwd()
+        os.chdir(self.test_dir)
+        self._old_out, self._old_err = sys.stdout, sys.stderr
+        self.out, self.err = _capture_stdout(), _capture_stderr()
+        sys.stdout, sys.stderr = self.out, self.err
+
+    def tearDown(self):
+        sys.stdout, sys.stderr = self._old_out, self._old_err
+        os.chdir(self.old_cwd)
+        shutil.rmtree(self.test_dir)
+
+    # -- helpers -------------------------------------------------------
+
+    def _source(self, text, name='in.md'):
+        with io.open(name, 'w', encoding='utf-8', newline='') as f:
+            f.write(text)
+        return name
+
+    def _import(self, text, argv_extra=None, expect_failure=False):
+        # Run the CLI in-process; return (stdout text, stderr text, code).
+        name = self._source(text)
+        argv = [name] + list(argv_extra or [])
+        old_out, old_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = self.out, self.err
+        try:
+            code = 0
+            try:
+                md2todo.main(argv)
+            except SystemExit as exc:
+                code = exc.code
+        finally:
+            sys.stdout, sys.stderr = old_out, old_err
+        out, err = _as_text(self.out), _as_text(self.err)
+        if expect_failure:
+            self.assertEqual(code, 1, "expected exit 1; out={!r} err={!r}".format(out, err))
+        else:
+            self.assertEqual(code, 0, "unexpected failure: {!r}".format(err))
+        return out, err
+
+    def _read(self, path):
+        with io.open(path, 'r', encoding='utf-8') as f:
+            return f.read()
+
+    def _todo_lines(self):
+        if not os.path.exists(todo.TODO_FILE):
+            return []
+        return [l for l in self._read(todo.TODO_FILE).splitlines() if l]
+
+    def _done_lines(self):
+        if not os.path.exists(todo.DONE_FILE):
+            return []
+        return [l for l in self._read(todo.DONE_FILE).splitlines() if l]
+
+    def _issue_md(self, line):
+        h = todo._hash_of_line(line)
+        self.assertIsNotNone(h, "no hash token in {!r}".format(line))
+        path = os.path.join(todo.ISSUES_DIR, h, 'issue.md')
+        self.assertTrue(os.path.exists(path), "missing issue.md for {}".format(h))
+        return self._read(path)
+
+    def _no_issue_md(self, line):
+        h = todo._hash_of_line(line)
+        path = os.path.join(todo.ISSUES_DIR, h, 'issue.md')
+        self.assertFalse(os.path.exists(path), "unexpected issue.md for {}".format(h))
+
+    # -- grammar -------------------------------------------------------
+
+    def test_markers_and_checkbox_states(self):
+        out, _err = self._import(
+            "- [ ] dash open\n"
+            "* [x] star checked\n"
+            "+ [X] plus checked\n"
+            "1. [ ] ordered dot\n"
+            "7) [x] ordered paren\n")
+        todo_lines = self._todo_lines()
+        done_lines = self._done_lines()
+        self.assertEqual(len(todo_lines), 2, "2 unchecked -> Index: {!r}".format(todo_lines))
+        self.assertEqual(len(done_lines), 3, "3 checked -> Archive: {!r}".format(done_lines))
+        self.assertTrue(todo_lines[0].endswith("dash open hash:" + todo._hash_of_line(todo_lines[0])))
+        self.assertIn("star checked", done_lines[0])
+        self.assertIn("plus checked", done_lines[1])
+        self.assertIn("ordered dot", todo_lines[1])
+        self.assertIn("ordered paren", done_lines[2])
+
+    def test_empty_item_before_real_item_is_not_content(self):
+        # A skipped empty item contributes no following content to the
+        # next Issue: there is nothing between them but the skipped item.
+        self._import("- [ ] \n- [ ] Real\n")
+        self._no_issue_md(self._todo_lines()[0])
+
+    def test_fenced_code_block_is_content_not_items(self):
+        self._import("- [ ] real\n"
+                     "```markdown\n"
+                     "- [ ] fenced\n"
+                     "```\n")
+        self.assertEqual(len(self._todo_lines()), 1, "fenced checkbox must not be an Issue")
+        body = self._issue_md(self._todo_lines()[0])
+        self.assertIn("- [ ] fenced", body, "fenced content stays verbatim in issue.md")
+
+    def test_indented_item_without_parent_is_top_level(self):
+        self._import("    - [ ] deeply indented orphan\n")
+        lines = self._todo_lines()
+        self.assertEqual(len(lines), 1)
+        self.assertIn("deeply indented orphan", lines[0])
+
+    # -- content attribution -------------------------------------------
+
+    def test_preamble_goes_to_first_issue_nested_block_verbatim(self):
+        self._import("# Title\n"
+                     "\n"
+                     "Intro prose.\n"
+                     "\n"
+                     "- [ ] Parent\n"
+                     "  - [ ] child one\n"
+                     "  between children\n"
+                     "  - [x] child two\n")
+        lines = self._todo_lines()
+        self.assertEqual(len(lines), 1, "children are not Issues: {!r}".format(lines))
+        body = self._issue_md(lines[0])
+        self.assertEqual(body,
+                         "# Parent\n"
+                         "\n"
+                         "# Title\n"
+                         "\n"
+                         "Intro prose.\n"
+                         "\n"
+                         "- [ ] child one\n"
+                         "between children\n"
+                         "- [x] child two\n",
+                         "nested block is dedented, preamble is the preceding content")
+
+    def test_content_between_issues_precedes_the_later_one(self):
+        self._import("- [ ] A\n"
+                     "  - [ ] a child\n"
+                     "prose before B\n"
+                     "\n"
+                     "- [ ] B\n")
+        lines = self._todo_lines()
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(self._issue_md(lines[0]), "# A\n\n- [ ] a child\n")
+        self.assertEqual(self._issue_md(lines[1]), "# B\n\nprose before B\n")
+
+    def test_eof_content_goes_to_last_issue_under_notes(self):
+        self._import("- [ ] Only\n"
+                     "\n"
+                     "trailing one\n"
+                     "trailing two\n")
+        body = self._issue_md(self._todo_lines()[0])
+        self.assertEqual(body, "# Only\n\n## Notes\n\ntrailing one\ntrailing two\n")
+
+    def test_blank_lines_trimmed_but_internal_ones_kept(self):
+        self._import("\n\n"
+                     "- [ ] Item\n"
+                     "\n\n"
+                     "  - [ ] first\n"
+                     "\n"
+                     "\n"
+                     "  - [ ] second\n"
+                     "\n\n")
+        body = self._issue_md(self._todo_lines()[0])
+        self.assertEqual(body, "# Item\n\n- [ ] first\n\n\n- [ ] second\n")
+
+    def test_contentless_item_creates_no_issue_md(self):
+        self._import("- [ ] bare\n")
+        self._no_issue_md(self._todo_lines()[0])
+        self.assertFalse(os.path.isdir(todo.ISSUES_DIR) and
+                         os.listdir(todo.ISSUES_DIR), "no Details Directory expected")
+
+    # -- state mapping -------------------------------------------------
+
+    def test_checked_with_only_checked_descendants_imports_closed(self):
+        self._import("- [x] Done\n"
+                     "  - [x] child\n"
+                     "     - [X] grandchild\n")
+        self.assertEqual(self._todo_lines(), [], "fully checked subtree stays closed")
+        done = self._done_lines()
+        self.assertEqual(len(done), 1)
+        self.assertTrue(done[0].startswith("x "), "Archive format: {!r}".format(done[0]))
+        self.assertIn("Done", done[0])
+        self.assertEqual(self._issue_md(done[0]), "# Done\n\n- [x] child\n   - [X] grandchild\n")
+
+    def test_checked_with_unchecked_descendant_imports_open_with_originally(self):
+        self._import("- [x] Parent\n"
+                     "  - [x] done child\n"
+                     "  - [ ] open grandchild\n")
+        todo_lines = self._todo_lines()
+        self.assertEqual(len(todo_lines), 1, "must import open: {!r}".format(todo_lines))
+        self.assertEqual(self._done_lines(), [])
+        body = self._issue_md(todo_lines[0])
+        self.assertEqual(body,
+                         "# Parent\n\noriginally: - [x]\n\n- [x] done child\n- [ ] open grandchild\n",
+                         "the original checked state is recorded right after the header")
+
+    def test_unchecked_imports_open_without_originally_record(self):
+        self._import("- [ ] Todo\n  - [ ] child\n")
+        body = self._issue_md(self._todo_lines()[0])
+        self.assertEqual(body, "# Todo\n\n- [ ] child\n")
+        self.assertNotIn("originally:", body)
+
+    # -- overlong titles -----------------------------------------------
+
+    def test_overlong_title_truncated_in_index_and_hash_from_truncation(self):
+        title = " ".join("word{}".format(i) for i in range(60))
+        self.assertGreater(len(title), md2todo.TITLE_LIMIT)
+        self._import("- [ ] {}\n".format(title))
+        line = self._todo_lines()[0]
+        index_title = todo._title_from_line(line)
+        self.assertTrue(index_title.endswith(md2todo.ELLIPSIS),
+                        "overlong Index title must end with '...': {!r}".format(index_title))
+        self.assertLessEqual(len(index_title), md2todo.TITLE_LIMIT + len(md2todo.ELLIPSIS))
+        self.assertEqual(index_title, md2todo.truncate_title(title))
+        # Truncated at a word boundary: no partial word before the dots.
+        self.assertNotIn("wor" + md2todo.ELLIPSIS, index_title)
+        self.assertNotIn(u"\u2026", index_title, "ASCII dots only, never a Unicode ellipsis")
+        # Hash is minted from the truncated title (ADR-0006).
+        real_generate = todo.generate_hash
+        seen = []
+
+        def spy(t):
+            seen.append(t)
+            return real_generate(t)
+
+        todo.generate_hash = spy
+        try:
+            self._import("- [ ] {}\n".format(title))
+        finally:
+            todo.generate_hash = real_generate
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(seen[0], index_title, "hash must be minted from the truncated title")
+
+    def test_overlong_title_without_children_issue_md_is_plain_title(self):
+        title = " ".join("word{}".format(i) for i in range(60))
+        self._import("- [ ] {}\n".format(title))
+        body = self._issue_md(self._todo_lines()[0])
+        self.assertEqual(body, title + "\n", "full title, plain text, no header")
+
+    def test_overlong_title_with_children_keeps_full_header(self):
+        title = " ".join("word{}".format(i) for i in range(60))
+        self._import("- [ ] {}\n  - [ ] kid\n".format(title))
+        body = self._issue_md(self._todo_lines()[0])
+        self.assertEqual(body, "# {}\n\n- [ ] kid\n".format(title),
+                         "full title in the header, never truncated")
+
+    def test_truncate_exactly_at_limit_is_untouched(self):
+        title = "a" * md2todo.TITLE_LIMIT
+        self.assertEqual(md2todo.truncate_title(title), title)
+        self.assertEqual(md2todo.truncate_title("b" * (md2todo.TITLE_LIMIT + 1)),
+                         "b" * md2todo.TITLE_LIMIT + md2todo.ELLIPSIS,
+                         "a single long word is hard-cut")
+
+    # -- skipped content -----------------------------------------------
+
+    def test_empty_item_without_children_skipped_with_warning(self):
+        out, err = self._import("- [ ] \n- [ ] Real\n- [ ] Another\n")
+        self.assertIn("warning: skipped empty checklist item at line 1", err)
+        lines = self._todo_lines()
+        self.assertEqual(len(lines), 2, "only the real items are Issues: {!r}".format(lines))
+        self.assertIn("Real", lines[0])
+        self.assertIn("Another", lines[1])
+        self.assertIn("2 issue(s)", out)
+
+    def test_empty_item_with_children_promotes_children(self):
+        _out, err = self._import("- [ ]\n"
+                                 "   - [ ] child A\n"
+                                 "      - [ ] grandchild of A\n"
+                                 "   - [x] child B\n")
+        self.assertIn("warning: skipped 1 empty checklist item", err)
+        todo_lines = self._todo_lines()
+        self.assertEqual(len(todo_lines), 1, "children promoted (open one): {!r}".format(todo_lines))
+        self.assertIn("child A", todo_lines[0])
+        self.assertIn("child B", self._done_lines()[0])
+        self.assertEqual(self._issue_md(todo_lines[0]),
+                         "# child A\n\n- [ ] grandchild of A\n")
+
+    def test_only_empty_items_fails_loudly(self):
+        out, err = self._import("- [ ]\n- [x]\n", expect_failure=True)
+        self.assertIn("no checklist items found", err)
+        self.assertEqual(self._todo_lines(), [])
+        self.assertFalse(os.path.exists(todo.TODO_FILE), "no writes on failure")
+
+    # -- metadata and tags ---------------------------------------------
+
+    def test_titles_are_verbatim_no_token_extraction(self):
+        self._import("- [ ] Fix thing +backend @bug ~2h #feature 2026-11-01\n")
+        line = self._todo_lines()[0]
+        self.assertEqual(todo._title_from_line(line),
+                         "Fix thing +backend @bug ~2h #feature 2026-11-01",
+                         "the whole line after the checkbox is the title")
+        self.assertEqual(line.count("+backend"), 1)
+        self.assertEqual(line.count("@bug"), 1)
+
+    def test_global_tags_applied_to_every_issue(self):
+        self._import("- [ ] one\n- [x] two\n", ['-p', 'b', '--project', 'backend',
+                                                '--context', '@bug'])
+        open_line = self._todo_lines()[0]
+        closed_line = self._done_lines()[0]
+        for line in (open_line, closed_line):
+            self.assertIn("(B)", line)
+            self.assertIn("+backend", line)
+            self.assertIn("@bug", line)
+        self.assertTrue(open_line.startswith("(B) "), "priority leads the Index line")
+        self.assertEqual(closed_line.count("@bug"), 1, "no doubled @")
+
+    # -- dry run -------------------------------------------------------
+
+    def test_dry_run_writes_nothing_and_prints_plan(self):
+        out, _err = self._import("- [ ] open one\n"
+                                 "- [x] closed one\n"
+                                 "- [ ] with child\n"
+                                 "  - [ ] kid\n",
+                                 ['--dry-run'])
+        self.assertIn("would create (open) line 1: open one", out)
+        self.assertIn("would create (closed) -> done.txt: closed one", out)
+        self.assertIn("would create issue.md:", out)
+        self.assertIn("hashes will differ on later runs (timestamp-based)", out)
+        self.assertIn("would import 3 issue(s)", out)
+        self.assertEqual(self._todo_lines(), [], "dry run must not write the Index")
+        self.assertEqual(self._done_lines(), [], "dry run must not write the Archive")
+        self.assertFalse(os.path.exists(todo.ISSUES_DIR), "dry run must not create directories")
+
+    def test_dry_run_predicts_append_line_numbers(self):
+        todo.ensure_environment()
+        with io.open(todo.TODO_FILE, 'w', encoding='utf-8', newline='') as f:
+            f.write("2026-11-06 existing hash:deadbeef\n")
+        out, _err = self._import("- [ ] first\n- [ ] second\n", ['--dry-run'])
+        self.assertIn("would create (open) line 2: first", out)
+        self.assertIn("would create (open) line 3: second", out)
+
+    # -- CLI -----------------------------------------------------------
+
+    def test_flatten_is_reserved_and_fails_loudly(self):
+        out, err = self._import("- [ ] a\n  - [ ] b\n", ['--flatten'], expect_failure=True)
+        self.assertIn("--flatten is not implemented yet", err)
+        self.assertEqual(self._todo_lines(), [])
+
+    def test_missing_file_fails_loudly(self):
+        old_out, old_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = self.out, self.err
+        try:
+            with self.assertRaises(SystemExit) as excinfo:
+                md2todo.main(['does-not-exist.md'])
+        finally:
+            sys.stdout, sys.stderr = old_out, old_err
+        self.assertEqual(excinfo.exception.code, 1)
+        self.assertIn("file not found: does-not-exist.md", _as_text(self.err))
+
+    def test_no_checklist_items_fails_loudly(self):
+        _out, err = self._import("# Just a heading\n\nprose only\n", expect_failure=True)
+        self.assertIn("no checklist items found", err)
+
+    # -- hash uniqueness -----------------------------------------------
+
+    def test_hashes_unique_across_import_and_existing_tokens(self):
+        todo.ensure_environment()
+        with io.open(todo.TODO_FILE, 'w', encoding='utf-8', newline='') as f:
+            f.write("2026-11-06 taken hash:deadbeef\n")
+        self._import("- [ ] one\n- [ ] two\n- [x] three\n")
+        hashes = [todo._hash_of_line(l) for l in self._todo_lines() + self._done_lines()]
+        self.assertEqual(len(set(hashes)), 4, "expected 4 distinct hashes: {!r}".format(hashes))
+        self.assertEqual(hashes.count("deadbeef"), 1, "the existing token is untouched")
+        self.assertEqual(len([h for h in hashes if h != "deadbeef"]), 3)
+
+    def test_index_order_follows_source_order(self):
+        self._import("- [x] first (closed)\n"
+                     "- [ ] second\n"
+                     "- [ ] third\n")
+        titles = [todo._title_from_line(l) for l in self._todo_lines()]
+        self.assertEqual(titles, ["second", "third"],
+                         "open issues append in source order (ADR-0004)")
 
 
 if __name__ == '__main__':

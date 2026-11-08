@@ -212,6 +212,76 @@ TODO_NO_EDITOR=1 todo.py edit 3   # Error: editor launch disabled by $TODO_NO_ED
   `.issues/<hash>/` directory and no bootstrap `issue.md`.
 - Only `edit` reads it; no other command spawns an editor.
 
+## Importing a GFM task list (`md2todo.py`)
+
+`md2todo.py` converts a GitHub-Flavored Markdown checklist into Issues
+(ADR-0006). It is a **separate tool**, not a subcommand: import is a
+one-shot conversion, and nothing in `todo.py` imports. One file per run.
+
+```text
+md2todo.py path/to/notes.md              # import
+md2todo.py path/to/notes.md --dry-run    # print the plan, write nothing
+md2todo.py notes.md -p B --project backend --context bug
+```
+
+**v1 imports top-level items only.** Nested items are not Issues: they
+are stored verbatim (dedented) in the parent's `.issues/<hash>/issue.md`,
+so nesting still has a permanent home. `--flatten` (every checkbox item
+at any depth becomes an Issue, child titles prefixed with the ancestor
+path) is reserved by name and **fails loudly** with "not implemented
+yet".
+
+What counts as a Checklist Item: a list marker (`-`, `*`, `+`, or
+ordered `N.` / `N)`) plus `[ ]`, `[x]`, or `[X]`. Checklist-looking lines
+inside a fenced code block (``` or `~~~`) are Content, not items. An
+indented item with no parent above it is treated as top-level
+(indentation is a hint, not a requirement).
+
+Content attribution:
+
+| Content | Where it goes |
+| --- | --- |
+| Before the first item | first item's `issue.md` |
+| Between item A's subtree and item B | B's `issue.md` (preceding content) |
+| Inside an item's subtree | that item's `issue.md` (nested block) |
+| After the last item's subtree | last item's `issue.md`, under `## Notes` |
+
+Leading/trailing blank lines of a region are trimmed; internal blank
+lines stay verbatim. `issue.md` is created **only** when there is
+content (preceding content, children, trailing notes, or an overlong
+title). A content-less issue is its Index / Archive line alone.
+
+State mapping: `[x]` / `[X]` imports **closed** (appended to `done.txt`
+as `x <today> <line> hash:<h>`, same as `close`), unless the item has
+**any unchecked descendant** - then it imports **open** and its
+`issue.md` records `originally: - [x]` right after the title header. An
+item with open children is not done.
+
+Titles are imported verbatim: no `+project` / `@context` / `~duration` /
+`#type` / date extraction (a `@mention` in a markdown file is a
+mention). Use the global `-p` / `--project` / `--context` flags to tag
+**every** imported issue the same way `add` does.
+
+Titles over 200 characters are truncated in the Index line to 200 chars
+at a word boundary with `...` (three ASCII dots) appended, and the hash
+is minted from the **truncated** title. Consequence: a title-substring
+identifier can only match the truncated text; `hash:<hex>` always
+resolves. The full title is preserved in `issue.md` (as the header when
+the item has children, as plain text when it has none).
+
+- Index lines append in file order (ADR-0004) and look exactly like
+  `add`'s: `[priority?] [today] [title] hash:<h>`.
+- No dedup against existing Issues (same as `add`); hashes are minted
+  through the usual uniqueness retry against `todo.txt` + `done.txt`.
+- `--dry-run` prints one line per issue (`would create (open) line N:`
+  / `would create (closed) -> done.txt:`) plus the `issue.md` paths it
+  would write, and warns that hashes will differ on later runs
+  (timestamp-based).
+- Failures are loud (exit 1): missing file, zero checklist items, plain
+  `--flatten`.
+- An empty checkbox (`- [ ]` with no text) is skipped with a warning;
+  its children, if any, are **promoted** to top-level Issues.
+
 ## File Layout
 
 ```text
@@ -219,6 +289,7 @@ TODO_NO_EDITOR=1 todo.py edit 3   # Error: editor launch disabled by $TODO_NO_ED
 +-- todo.txt                # Active issues index
 +-- done.txt                # Archived/completed issues
 +-- todo.py                 # Core CLI script
++-- md2todo.py              # GFM task list importer (ADR-0006)
 +-- test_todo.py            # Standard library test suite
 +-- .issues/                # Created lazily, per issue with details
     +-- a1b2c3d4/           # Unique issue hash directory

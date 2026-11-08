@@ -1,0 +1,1 @@
+v1 of md2todo.py is hardcoded to top-level-only: nested children are stored verbatim in the parent issue.md, never as Issues. Revisit after real use whether an explicit flag (e.g. --top-level-only) is needed so the default can change to --flatten semantics without breaking callers. Deferred item in docs/plans/done/gfm-import.md; blocked on hash-based --flatten landing first.

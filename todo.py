@@ -273,37 +273,63 @@ def cmd_add(args):
         _trace(args, "add: no description; no issue dir created for {}".format(issue_hash))
 
     # Format todo.txt line: [priority] [date] [title] hash:<id> [+project] [@context]
-    line_parts = []
-    if args.priority:
-        line_parts.append("({})".format(args.priority.upper()))
-    line_parts.append(today)
-    line_parts.append(args.title)
-    line_parts.append("hash:{}".format(issue_hash))
-
-    if args.project:
-        proj = args.project if args.project.startswith('+') else "+{}".format(args.project)
-        line_parts.append(proj)
-    if args.context:
-        ctx = args.context if args.context.startswith('@') else "@{}".format(args.context)
-        line_parts.append(ctx)
-
-    new_line = " ".join(line_parts) + "\n"
+    new_line = format_index_line(args.title, issue_hash, priority=args.priority,
+                                 project=args.project, context=args.context,
+                                 date=today) + "\n"
 
     # ADR-0004: `add` APPENDS, so Index line numbers are stable for
     # life. Prepending renumbered every Issue on every add and silently
     # invalidated any remembered line number.
+    # The number is only honest once append made it stable (ADR-0004).
+    line_number = append_index_line(new_line)
+    print("Created issue [{}] at line {}: '{}'".format(issue_hash, line_number, args.title))
+
+def format_index_line(title, issue_hash, priority=None, project=None,
+                      context=None, date=None):
+    """Format an Index line: [priority] [date] [title] hash:<h> [+p] [@c].
+
+    Shared by `add` and the GFM import (md2todo.py), ADR-0006: the import
+    must reuse the tracker's formatting/appending, not reimplement it.
+    """
+    line_parts = []
+    if priority:
+        line_parts.append("({})".format(priority.upper()))
+    line_parts.append(date or datetime.date.today().isoformat())
+    line_parts.append(title)
+    line_parts.append("hash:{}".format(issue_hash))
+    if project:
+        line_parts.append(project if project.startswith('+') else "+{}".format(project))
+    if context:
+        line_parts.append(context if context.startswith('@') else "@{}".format(context))
+    return " ".join(line_parts)
+
+def append_index_line(line):
+    """Append one line to the Index and return its 1-based line number.
+
+    ADR-0004: append (never prepend) so existing line numbers stay stable
+    for life. A hand-written last line without a trailing newline is not
+    glued onto the new line.
+    """
+    if not line.endswith('\n'):
+        line += '\n'
     with open(TODO_FILE, 'r') as f:
         existing = f.read()
     if existing and not existing.endswith('\n'):
-        # Do not glue the new line onto a hand-written last line that
-        # lacks a trailing newline (the read-modify-write keeps bytes).
         existing += '\n'
     with open(TODO_FILE, 'w') as f:
-        f.write(existing + new_line)
+        f.write(existing + line)
+    return existing.count('\n') + 1
 
-    # The number is only honest once append made it stable (ADR-0004).
-    line_number = existing.count('\n') + 1
-    print("Created issue [{}] at line {}: '{}'".format(issue_hash, line_number, args.title))
+def format_archive_line(index_line, date=None):
+    """Format an Archive line: 'x <completion-date> <index line>' (ADR-0004)."""
+    return "x {} {}".format(date or datetime.date.today().isoformat(), index_line)
+
+def append_done_line(line):
+    """Append one line to the Archive (done.txt)."""
+    if not line.endswith('\n'):
+        line += '\n'
+    with open(DONE_FILE, 'a') as f:
+        f.write(line)
 
 def _archive_body(line):
     # ADR-0004: an archived line is `x <completion-date> <original line>`.
@@ -528,15 +554,14 @@ def cmd_close(args):
     if raw_line and not _hash_of_line(raw_line):
         title = _title_from_line(raw_line)
         full_hash = mint_hash_unique(title, _all_hash_tokens())
-        minted = "x {} {} hash:{}\n".format(datetime.date.today().isoformat(), raw_line, full_hash)
+        minted = format_archive_line("{} hash:{}".format(raw_line, full_hash)) + "\n"
         with open(TODO_FILE, 'r') as f:
             lines = f.readlines()
         n = int(args.identifier)
         new_todo_lines = lines[:n - 1] + lines[n:]
         with open(TODO_FILE, 'w') as f:
             f.writelines(new_todo_lines)
-        with open(DONE_FILE, 'a') as f:
-            f.write(minted)
+        append_done_line(minted)
         _trace(args, "close: minted hash {} for no-hash line {}".format(full_hash, n))
         print("Closed and archived issue [{}] (hash minted at close)".format(full_hash))
         return
@@ -552,9 +577,8 @@ def cmd_close(args):
 
     for line in lines:
         if "hash:{}".format(full_hash) in line:
-            clean_line = line.strip()
             # Format closed line: x YYYY-MM-DD <original_line>
-            matched_line = "x {} {}\n".format(today, clean_line)
+            matched_line = format_archive_line(line.strip(), today) + "\n"
         else:
             new_todo_lines.append(line)
 
@@ -565,8 +589,7 @@ def cmd_close(args):
     with open(TODO_FILE, 'w') as f:
         f.writelines(new_todo_lines)
 
-    with open(DONE_FILE, 'a') as f:
-        f.write(matched_line)
+    append_done_line(matched_line)
 
     print("Closed and archived issue [{}]".format(full_hash))
 
