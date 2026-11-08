@@ -1,6 +1,10 @@
 # Index order, `list --sort`, and the priority filter
 
-Status: open - settled by a grill session 2026-11-07; not started.
+Status: done 2026-11-07 - shipped in 3 commits: append + `at line N`
+(ADR-0004, hash:6fdb5271 closed), `--sort`/`--reverse` (ADR-0004),
+`--priority-filter` grammar (ADR-0005); hash:8d8ab446 closed. Deferred
+and still open: hash:50000d8e (`-s`), hash:b8480e3f (archive token
+order, blocks the `--closed` grammar).
 
 Spawn sources: tracker issue hash:8d8ab446 (`--sort`, deferred from
 `docs/plans/done/initial.md`), plus two items filed by this session
@@ -67,7 +71,7 @@ and finding old work. Everything below follows from that.
 
 Three commits, each pairing an ADR with the code it describes.
 
-- [ ] File tracker items first, so the spawn trail exists:
+- [x] File tracker items first, so the spawn trail exists:
       - append change (`add` prepends) - its own issue;
       - archived lines deviate from todo.txt token order: `(P)` sits
         after `x <completion-date>`, `_title_from_line` never strips
@@ -76,18 +80,19 @@ Three commits, each pairing an ADR with the code it describes.
         split into "parse bug" and "`--closed` filter gap");
       - TODO: `-s` short flag for `--sort`, revisit after real use;
       - update hash:8d8ab446's body to this plan's real scope.
-- [ ] Commit 1: `docs/adr/0004-*.md` (index vs display order), append
+- [x] Commit 1: `docs/adr/0004-*.md` (index vs display order), append
       in `cmd_add`, `at line N` output, tests ("add does not renumber
       existing issues"), README ordering contract.
-- [ ] Commit 2: `--sort date|priority`, `--reverse`/`-r`, both files,
+- [x] Commit 2: `--sort date|priority`, `--reverse`/`-r`, both files,
       stable tie-break on index order, buckets last under reverse,
       README (incl. the undated-lines caveat for date sort).
-- [ ] Commit 3: `docs/adr/0005-*.md` (grammar, with `+C`/`-C`,
+- [x] Commit 3: `docs/adr/0005-*.md` (grammar, with `+C`/`-C`,
       `A..C` and word forms recorded as rejected), `--priority-filter`
       parser + rename, README grammar table, help line, tests for every
       accepted shape and every rejected one.
-- [ ] Close hash:8d8ab446 and the two filed issues once their commits
-      land.
+- [x] Close hash:8d8ab446 and hash:6fdb5271 (append) once their commits
+      land. NOT the two deferrals: hash:50000d8e (`-s`) and
+      hash:b8480e3f (archive token order) stay open per Deferred.
 
 ## Deferred
 
@@ -105,3 +110,17 @@ Three commits, each pairing an ADR with the code it describes.
 - Filter: `C`, `A-C`, `C+`, `C-`, lowercase, padded, plus each rejected
   form exiting 1 with the accepted shapes in the message.
 - Keep the suite quiet (stdout/stderr captured as today).
+
+## Settled during implementation
+
+Two points the grill left open, decided while implementing (both
+recorded here rather than re-opening the plan):
+
+- `C-`/`C+` bound forms take **any** letter, including a range end:
+  `A-` = A..Z, `Z+` = Z..A. Decision 13 listed `A-` as rejected; that
+  contradicted the grammar, and the grammar wins (ADR-0005).
+- Specs starting with `-` (e.g. `-C`) cannot reach the parser via
+  `-p -C` (argparse consumes it, exit 2). Documented as
+  `--priority-filter=-C`; argparse's exit 2 accepted as-is.
+- `list --closed` with a grammar spec fails loudly (exit 1, names the
+  accepted shapes and hash:b8480e3f) rather than printing an empty list.

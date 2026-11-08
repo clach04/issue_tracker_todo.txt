@@ -704,7 +704,7 @@ class TestLocalIssueTracker(unittest.TestCase):
     def _list(self, **kw):
         # Run cmd_list with view flags defaulted; return its stdout text.
         kw.setdefault('closed', False)
-        kw.setdefault('priority', None)
+        kw.setdefault('priority_filter', None)
         kw.setdefault('sort', None)
         kw.setdefault('reverse', False)
         out = _capture_stdout()
@@ -807,8 +807,114 @@ class TestLocalIssueTracker(unittest.TestCase):
         self.assertEqual([n for n, _l in rows], [2, 1], "newest first")
 
     # ------------------------------------------------------------------
-    # Close-on-closed remains an error
+    # list --priority-filter grammar (ADR-0005)
     # ------------------------------------------------------------------
+
+    def _seed_priority_rows(self):
+        # Index order: A, C, B, unprioritised, Z.
+        todo.ensure_environment()
+        self._write_raw(todo.TODO_FILE,
+                        "(A) 2026-11-01 a hash:aaaaaaaa\n"
+                        "(C) 2026-11-02 c hash:cccccccc\n"
+                        "(B) 2026-11-03 b hash:bbbbbbbb\n"
+                        "2026-11-04 unprioritised hash:dddddddd\n"
+                        "(Z) 2026-11-05 z hash:eeeeeeee\n")
+
+    def _filtered_lines(self, spec, **kw):
+        return [n for n, _l in self._rows(self._list(priority_filter=spec, **kw))]
+
+    def _filter_error(self, spec, **kw):
+        # Run the filter and return stderr text (asserting exit code 1).
+        err = _capture_stderr()
+        old_err = sys.stderr
+        sys.stderr = err
+        try:
+            with self.assertRaises(SystemExit) as excinfo:
+                self._list(priority_filter=spec, **kw)
+        finally:
+            sys.stderr = old_err
+        self.assertEqual(excinfo.exception.code, 1,
+                         "spec {!r} must fail loudly".format(spec))
+        return _as_text(err)
+
+    def test_priority_filter_exact(self):
+        self._seed_priority_rows()
+        self.assertEqual(self._filtered_lines("C"), [2])
+        self.assertEqual(self._filtered_lines("A"), [1])
+
+    def test_priority_filter_range(self):
+        self._seed_priority_rows()
+        self.assertEqual(self._filtered_lines("A-C"), [1, 2, 3],
+                         "range keeps Index order")
+
+    def test_priority_filter_and_better(self):
+        self._seed_priority_rows()
+        self.assertEqual(self._filtered_lines("C+"), [1, 2, 3], "C and better = A..C")
+        self.assertEqual(self._filtered_lines("A+"), [1], "A+ is A alone")
+
+    def test_priority_filter_and_worse(self):
+        self._seed_priority_rows()
+        self.assertEqual(self._filtered_lines("C-"), [2, 5], "C and worse = C..Z")
+        self.assertEqual(self._filtered_lines("Z-"), [5], "Z- is Z alone")
+
+    def test_priority_filter_case_insensitive_and_trimmed(self):
+        self._seed_priority_rows()
+        self.assertEqual(self._filtered_lines("c"), [2])
+        self.assertEqual(self._filtered_lines(" a-c "), [1, 2, 3])
+        self.assertEqual(self._filtered_lines("c+"), [1, 2, 3])
+
+    def test_priority_filter_excludes_unprioritised(self):
+        self._seed_priority_rows()
+        # A..Z must not drag in the unprioritised line: a missing key is
+        # not a priority.
+        self.assertEqual(self._filtered_lines("A-Z"), [1, 2, 3, 5])
+
+    def test_priority_filter_bound_forms_cover_the_whole_span(self):
+        self._seed_priority_rows()
+        # 'A-' is A and worse = A..Z, i.e. every prioritised issue. The
+        # grammar has no exception for a bound at the range end (the plan
+        # briefly listed 'A-' as rejected; settled 2026-11-07 in
+        # ADR-0005: the grammar wins, no special-cased nonsense values).
+        self.assertEqual(self._filtered_lines("A-"), [1, 2, 3, 5])
+        self.assertEqual(self._filtered_lines("Z+"), [1, 2, 3, 5])
+        self.assertEqual(self._filtered_lines("A+"), [1], "A and better is A alone")
+        self.assertEqual(self._filtered_lines("Z-"), [5], "Z and worse is Z alone")
+
+    def test_priority_filter_combines_with_sort(self):
+        self._seed_priority_rows()
+        self.assertEqual(self._filtered_lines("A-C", sort="priority", reverse=True),
+                         [2, 3, 1], "filter then sorted, reversed: C, B, A")
+
+    def test_priority_filter_rejects_bad_shapes(self):
+        self._seed_priority_rows()
+        for spec in ("ABC", "-C", "A-Z-", "C-A", "1", "(A)", ""):
+            err = self._filter_error(spec)
+            self.assertIn("invalid priority filter", err,
+                          "spec {!r} needs a loud parse error".format(spec))
+            self.assertIn("Accepted shapes" if spec == "C-A" else "accepted shapes",
+                          err, "the accepted shapes must be in the message")
+            self.assertIn("C, A-C, C+, C-", err,
+                          "message must name every accepted shape: {!r}".format(spec))
+
+    def test_priority_filter_swapped_range_is_not_silently_swapped(self):
+        self._seed_priority_rows()
+        err = self._filter_error("C-A")
+        self.assertIn("below range end", err)
+
+    def test_priority_filter_closed_accepts_exact_letter_only(self):
+        todo.ensure_environment()
+        self._write_raw(todo.DONE_FILE,
+                        "x 2026-11-07 (C) 2026-11-05 c hash:cccccccc\n"
+                        "x 2026-11-07 2026-11-06 plain hash:dddddddd\n")
+        # Exact letter keeps today's substring behaviour.
+        self.assertEqual(self._filtered_lines("C", closed=True), [1])
+        self.assertEqual(self._filtered_lines("c", closed=True), [1])
+        # Grammar specs fail loudly instead of printing an empty list.
+        for spec in ("A-C", "C+", "C-", "ABC"):
+            err = self._filter_error(spec, closed=True)
+            self.assertIn("exact letter only", err)
+            self.assertIn("hash:b8480e3f", err, "blocks-on reference must be named")
+
 
     def test_close_no_hash_line_mints_hash(self):
         # Manual no-hash line closed by line number: mint a hash at

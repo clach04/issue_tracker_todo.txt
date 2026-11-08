@@ -37,6 +37,14 @@ HASH_IN_LINE_RE = re.compile(r'hash:([0-9a-fA-F]+)')
 PRIORITY_RE = re.compile(r'^\([A-Z]\)$')
 DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
+# ADR-0005 priority filter grammar: 'C', 'A-C', 'C+', 'C-'. Parsed, never
+# substring-matched: an unparsable spec must fail loudly, because an empty
+# result reads as "no matching issues".
+PRIORITY_LETTER_RE = re.compile(r'^[A-Z]$')
+PRIORITY_RANGE_RE = re.compile(r'^([A-Z])-([A-Z])$')
+PRIORITY_BOUND_RE = re.compile(r'^([A-Z])([+-])$')
+PRIORITY_FILTER_SHAPES = "C, A-C, C+, C- (A is highest)"
+
 def ensure_environment():
     if not os.path.exists(ISSUES_DIR):
         os.makedirs(ISSUES_DIR)
@@ -321,6 +329,54 @@ def _first_priority_token(line):
             return part[1]
     return None
 
+def _parse_priority_filter(spec):
+    """Parse an ADR-0005 spec into an inclusive (low, high) letter range.
+
+    'C' -> (C, C); 'A-C' -> (A, C); 'C+' -> (A, C); 'C-' -> (C, Z).
+    Everything else fails loudly: silent fallbacks would print an empty
+    list, which reads as "no matching issues".
+    """
+    token = spec.strip().upper()
+    m = PRIORITY_LETTER_RE.match(token)
+    if m:
+        return (token, token)
+    m = PRIORITY_RANGE_RE.match(token)
+    if m:
+        low, high = m.group(1), m.group(2)
+        if low > high:
+            _fail("invalid priority filter '{}': range start {} is below range end {}."
+                  " Accepted shapes: {}".format(spec, low, high, PRIORITY_FILTER_SHAPES))
+        return (low, high)
+    m = PRIORITY_BOUND_RE.match(token)
+    if m:
+        letter, bound = m.group(1), m.group(2)
+        # 'C+' is C and better (A..C); 'C-' is C and worse (C..Z).
+        return ('A', letter) if bound == '+' else (letter, 'Z')
+    _fail("invalid priority filter '{}': accepted shapes are {}".format(
+        spec, PRIORITY_FILTER_SHAPES))
+
+def _matches_priority_filter(letter, bounds):
+    if letter is None:
+        # Unprioritised lines never match a spec: a missing key is not a
+        # priority (ADR-0004).
+        return False
+    low, high = bounds
+    return low <= letter <= high
+
+def _closed_priority_filter_bounds(spec):
+    """`list --closed` keeps today's exact-letter -p (ADR-0005 decision 15).
+
+    Archived-line priority is not reliably parseable yet (hash:b8480e3f),
+    so a spec that needs the grammar fails loudly instead of silently
+    matching nothing.
+    """
+    token = spec.strip().upper()
+    if not PRIORITY_LETTER_RE.match(token):
+        _fail("priority filtering on list --closed supports an exact letter only"
+              " (got '{}'); the grammar ({}) is blocked on the archived-line"
+              " token-order bug hash:b8480e3f".format(spec, PRIORITY_FILTER_SHAPES))
+    return (token, token)
+
 def _sort_key(sort_field, line):
     if sort_field == 'date':
         return _first_date_token(line)
@@ -363,13 +419,30 @@ def cmd_list(args):
     target_file = DONE_FILE if args.closed else TODO_FILE
     status_label = "Closed" if args.closed else "Open"
 
+    if args.priority_filter is not None:
+        # Parsed BEFORE reading rows: a bad spec fails loudly (exit 1),
+        # never as an empty list (ADR-0005).
+        if args.closed:
+            bounds = _closed_priority_filter_bounds(args.priority_filter)
+            _trace(args, "list: --closed exact priority filter {}".format(bounds[0]))
+        else:
+            bounds = _parse_priority_filter(args.priority_filter)
+            _trace(args, "list: priority filter {}..{}".format(bounds[0], bounds[1]))
+    else:
+        bounds = None
+
     rows = []
     with open(target_file, 'r') as f:
         for idx, line in enumerate(f, 1):
             line = line.strip()
             if not line:
                 continue
-            if args.priority and "({})".format(args.priority.upper()) not in line:
+            if args.closed:
+                # Legacy path: today's literal '(X)' substring test
+                # (ADR-0005 decision 15; hash:b8480e3f).
+                if bounds and "({})".format(bounds[0]) not in line:
+                    continue
+            elif bounds and not _matches_priority_filter(_first_priority_token(line), bounds):
                 continue
             rows.append((idx, line))
     rows = _sort_rows(args, rows, args.sort, args.reverse)
@@ -682,7 +755,9 @@ def main():
     # list / ls
     parser_list = subparsers.add_parser('list', parents=[common], help='List issues')
     parser_list.add_argument('--closed', action='store_true', help='List closed issues from done.txt')
-    parser_list.add_argument('-p', '--priority', help='Filter by priority', default=None)
+    parser_list.add_argument('-p', '--priority-filter', dest='priority_filter', default=None,
+                             metavar='SPEC',
+                             help='Filter by priority: A, A-C, C+, C- (exact letter only with --closed)')
     # ADR-0004: view flags only; the Index file is never rewritten.
     parser_list.add_argument('--sort', choices=['date', 'priority'], default=None,
                              help='Sort the displayed rows by date or priority (file order untouched)')

@@ -42,6 +42,42 @@ appends to `done.txt` (ADR-0004).
   line number**, so sorted output is visibly non-monotonic. The number
   always means "the Index line", never "the row on screen".
 
+## Filtering by priority
+
+`list -p` / `--priority-filter` takes a **spec**, not a letter lookup
+(ADR-0005). `A` is highest, `Z` lowest.
+
+| Spec | Meaning | Matches |
+| --- | --- | --- |
+| `C` | exact | `(C)` only |
+| `A-C` | range, inclusive | `(A)`, `(B)`, `(C)` |
+| `C+` | C **and better** | `(A)`..`(C)` |
+| `C-` | C **and worse** | `(C)`..`(Z)` |
+
+```text
+todo.py list -p A-C          # A through C
+todo.py list -p B+           # B and better (A, B) - the "do this next" list
+todo.py list -p B+ --sort priority
+```
+
+- Case-insensitive; surrounding whitespace is trimmed.
+- The bound forms take any letter: `A-` is every prioritised issue,
+  `Z+` its mirror. `A-Z` is the "prioritised only" filter.
+- **Unprioritised issues never match** a spec: a missing priority is not
+  a priority, and `--sort priority` puts them last.
+- Rejected loudly (exit 1) with the accepted shapes in the message:
+  `ABC`, `-C`, `A-Z-`, and a **swapped range** like `C-A` (never
+  silently swapped - an empty list after a bad guess reads as "no
+  matching issues"). A spec starting with `-` needs the attached form,
+  `--priority-filter=-C`, because `-p -C` is swallowed by the option
+  parser.
+- `list --closed` accepts an **exact letter only** (`-p C`). Archived
+  lines are not reliably parseable for priority yet (hash:b8480e3f), so
+  any grammar spec on `--closed` fails loudly rather than printing an
+  empty list.
+- `add` keeps `-p` / `--priority`: it *sets* a priority, `list`
+  *filters* by one.
+
 ## Sorting the list
 
 `--sort` and `--reverse`/`-r` reorder the **display only**; the Index
@@ -85,7 +121,7 @@ Here is a breakdown of the key-value pairs and metadata tags utilized by the loc
   * **`hash:<ID>`** (Custom Key-Value)
     The core linking mechanism of the tool. It maps a `todo.txt` index line directly to its sibling directory inside `.issues/<hash>/` (e.g., `hash:7a4f9b21`). `show` prints the ready-to-paste explicit form as a `Hash Token : hash:<hex>` line, so an identifier never has to be reassembled from the `hash:` token in the index line (and a digit-only hash is never mistaken for a line number). Storing the hash explicitly ensures that if you edit or update the issue title in the index file, the underlying description, comments, and attachments remain permanently and unambiguously attached.
   * **Priority `(A)` through `(Z)`** (Standard Prefix Notation)
-    Placed at the very beginning of the index line to indicate urgency (e.g., `(A)` for critical issues, `(B)` for normal tasks). The CLI parses this for filtering and sorting via `-p` / `--priority`.
+    Placed at the very beginning of the index line to indicate urgency (e.g., `(A)` for critical issues, `(B)` for normal tasks). The CLI parses this for filtering (`list -p` / `--priority-filter`, a spec like `A-C`) and sorting (`list --sort priority`).
   * **Project Tags (`+<project>`)** (Standard `todo.txt` Metadata)
     Used to group issues under specific subsystems, modules, or features within your repository (e.g., `+backend`, `+auth`).
   * **Context Tags (`@<context>`)** (Standard `todo.txt` Metadata)
