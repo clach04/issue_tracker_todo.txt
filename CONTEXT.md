@@ -40,6 +40,18 @@ _Avoid_: Raw line, bare entry, hashless todo
 To bestow an Identifier on an Unhashed Line. Happens at close time or on demand for the whole Index.
 _Avoid_: Backfill, assign, generate hash
 
+**Import**:
+Converting a GFM task-list markdown file into Issues (the one-shot job of `md2todo.py`). Not a tracker operation: nothing in `todo.py` imports.
+_Avoid_: Sync, migrate, convert
+
+**Checklist Item**:
+A GFM task-list line (`- [ ]` / `- [x]`) in an imported file. Becomes an Issue at top level; nested ones become part of the parent's issue.md.
+_Avoid_: Task, sub-task, checkbox
+
+**GFM Task List**:
+The GitHub-Flavored Markdown checklist syntax: a list marker with a `[ ]`/`[x]` checkbox, nestable by indentation. Source format for Import.
+_Avoid_: Todo list, markdown checklist
+
 **Editor Launch Suppressed**:
 The state in which `edit` starts no editor process, because the environment variable `TODO_NO_EDITOR` is non-empty. Editing an Issue is not disabled: `issue.md` stays writable by any other means. The command itself fails loudly (exit 1) before any Details Directory side effect.
 _Avoid_: Disabled editing, read-only issue, no-op edit, silent skip
