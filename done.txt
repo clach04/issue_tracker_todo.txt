@@ -13,3 +13,4 @@ x 2026-11-07 (C) 2026-11-07 add lacks the uniqueness retry that "hash" and close
 x 2026-11-07 update "show" to also include copy/pastable `hash` key value. Does include title so may already be a non-issue hash:0eff2c10
 x 2026-11-07 (C) 2026-11-06 Implement list --sort hash:8d8ab446 +trackertool @feature
 x 2026-11-07 2026-11-07 add prepends to todo.txt, so every add renumbers the Index hash:6fdb5271 +trackertool @techdebt
+x 2026-11-08 2026-11-08 md2todo _write_issue_md writes without explicit UTF-8 encoding (cp1252 mangling on Windows/py2) hash:5a2198a8 +tracker

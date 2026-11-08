@@ -140,11 +140,57 @@ def promote_issues(roots, warnings):
     walk(roots)
     return issues
 
-def _last_descendant_index(node):
-    last = node['index']
+def _last_descendant_index(node, lines, fenced):
+    """Last 0-based line index belonging to node's subtree.
+
+    Checkbox children are walked as before. Non-checkbox, non-fenced
+    lines indented deeper than the nearest preceding item belong to that
+    item too (continuation / note lines, ADR-0006): without this the
+    subtree ends at the item's own line and the notes leak into the next
+    item's preceding content.
+    """
+    last = _last_item_or_continuation_index(node['index'], lines, fenced)
     for child in node['children']:
-        last = max(last, _last_descendant_index(child))
+        last = max(last, _last_descendant_index(child, lines, fenced))
     return last
+
+def _last_item_or_continuation_index(index, lines, fenced):
+    """Scan forward from item `index` while lines continue that item.
+
+    A line continues the item when it is fenced, blank, or indented at
+    least one column deeper than the item's own indent. Scanning stops at
+    the first line shallower than or equal to the item's indent that is
+    neither blank nor fenced (a sibling or an outdented block), or at EOF.
+    Blank lines inside a run are kept optimistically; a trailing blank run
+    is trimmed later by _trim_blank. Fenced lines always continue: a code
+    block under an item may contain outdented content, and a fence whose
+    content is indented deeper than the next item's indent must not be
+    split between two items.
+    """
+    last = index
+    item_indent = None
+    for i in range(index + 1, len(lines)):
+        line = lines[i]
+        if fenced[i]:
+            last = i
+            continue
+        if not line.strip():
+            last = i
+            continue
+        indent = _indent_width(line[:len(line) - len(line.lstrip(' \t'))])
+        if item_indent is None:
+            item_indent = _item_indent_from_lines(index, lines, fenced)
+        if indent > item_indent:
+            last = i
+            continue
+        break
+    return last
+
+def _item_indent_from_lines(index, lines, fenced):
+    """The item's own indent width (ITEM_RE captured it at parse time)."""
+    m = ITEM_RE.match(lines[index])
+    assert m is not None, "line {} is not a checklist item: {!r}".format(index + 1, lines[index])
+    return _indent_width(m.group(1))
 
 def _has_unchecked_descendant(node):
     """True when any real descendant is unchecked (empty items are skipped)."""
@@ -258,6 +304,7 @@ def build_plan(lines):
     items = parse_items(lines)
     if not items:
         return [], []
+    fenced = _fenced_flags(lines)
     warnings = []
     issues = promote_issues(build_tree(items), warnings)
     skip_lines = set(node['index'] for node in warnings)
@@ -269,7 +316,8 @@ def build_plan(lines):
         next_start = issues[pos + 1]['index'] if pos + 1 < len(issues) else len(lines)
         # The subtree must not swallow the content that belongs to the
         # NEXT issue, so its end is capped by that issue's line.
-        body_end = min(_last_descendant_index(node), next_start - 1) + 1
+        body_end = min(_last_descendant_index(node, lines, fenced),
+                       next_start - 1) + 1
         preceding = _region(lines, prev_body_end, node['index'], skip_lines)
         nested = lines[node['index'] + 1:body_end]
         nested = _dedent(_trim_blank(nested))
@@ -302,7 +350,7 @@ def _write_issue_md(issue_hash, text):
     issue_dir = os.path.join(todo.ISSUES_DIR, issue_hash)
     if not os.path.exists(issue_dir):
         os.makedirs(issue_dir)
-    with open(_issue_md_path(issue_hash), 'w') as f:
+    with io.open(_issue_md_path(issue_hash), 'w', encoding='utf-8') as f:
         f.write(text)
 
 def _next_index_line_number():

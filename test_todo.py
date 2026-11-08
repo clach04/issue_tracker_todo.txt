@@ -1262,6 +1262,85 @@ class TestGfmImport(unittest.TestCase):
         body = self._issue_md(self._todo_lines()[0])
         self.assertEqual(body, "# Only\n\n## Notes\n\ntrailing one\ntrailing two\n")
 
+    def test_indented_continuation_lines_attach_to_own_item(self):
+        # Regression (real_test import, 2026-11-08): a "Done" note indented
+        # under a checked item used to leak into the NEXT item's preceding
+        # content, because _last_descendant_index only walked checkbox
+        # children. Continuation lines deeper than the item's indent belong
+        # to that item (ADR-0006 attribution amendment). "First" is checked
+        # with no unchecked descendant, so it imports closed with its notes
+        # in issue.md; "Second" is contentless.
+        self._import("- [x] First\n"
+                     "    -> Done (2026-11-08): fixed in foo.py.\n"
+                     "    second note line\n"
+                     "- [ ] Second\n")
+        lines = self._todo_lines()
+        self.assertEqual(len(lines), 1, "Second is the only open Issue: {!r}".format(lines))
+        self.assertIn("fixed in foo.py", self._issue_md(self._done_lines()[0]))
+        self._no_issue_md(lines[0])
+
+    def test_continuation_dedented_under_nested_block(self):
+        self._import("- [ ] A\n"
+                     "  - [ ] child\n"
+                     "  -> note for A\n"
+                     "- [ ] B\n")
+        lines = self._todo_lines()
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(self._issue_md(lines[0]),
+                         "# A\n\n- [ ] child\n-> note for A\n")
+        self._no_issue_md(lines[1])
+
+    def test_outdented_prose_between_items_still_precedes_next(self):
+        # ADR-0006 baseline kept: unindented (outdented) prose between two
+        # items is the NEXT item's preceding content, not the previous
+        # item's notes. A is contentless here, so it gets no issue.md.
+        self._import("- [ ] A\n"
+                     "prose before B\n"
+                     "- [ ] B\n")
+        self._no_issue_md(self._todo_lines()[0])
+        self.assertEqual(self._issue_md(self._todo_lines()[1]), "# B\n\nprose before B\n")
+
+    def test_continuation_lines_are_not_items_and_not_state(self):
+        # An indented "  - not a checkbox" line (no [ ]/[x]) must not be
+        # parsed as an item; it is continuation content of the item above.
+        self._import("- [ ] A\n"
+                     "  - plain dash line\n"
+                     "- [ ] B\n")
+        lines = self._todo_lines()
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(self._issue_md(lines[0]), "# A\n\n- plain dash line\n")
+        self._no_issue_md(lines[1])
+
+    def test_trailing_continuation_lines_go_to_notes_of_last_issue(self):
+        self._import("- [ ] Only\n"
+                     "  -> trailing note\n")
+        body = self._issue_md(self._todo_lines()[0])
+        self.assertIn("-> trailing note", body)
+
+    def test_fenced_block_under_item_stays_with_item(self):
+        # A code fence indented under an item must not be split off to the
+        # next item even when its content is outdented.
+        self._import("- [ ] A\n"
+                     "  ```\n"
+                     "outdented fenced line\n"
+                     "  ```\n"
+                     "- [ ] B\n")
+        body = self._issue_md(self._todo_lines()[0])
+        self.assertIn("outdented fenced line", body)
+        self._no_issue_md(self._todo_lines()[1])
+
+    def test_continuation_checked_item_with_notes_and_blank_runs(self):
+        # Blank lines inside a continuation run are kept (verbatim slice
+        # semantics); trailing blanks are trimmed by the region helpers.
+        self._import("- [x] A\n"
+                     "  note one\n"
+                     "\n"
+                     "  note two\n"
+                     "- [ ] B\n")
+        self.assertEqual(self._issue_md(self._done_lines()[0]),
+                         "# A\n\nnote one\n\nnote two\n")
+        self._no_issue_md(self._todo_lines()[0])
+
     def test_blank_lines_trimmed_but_internal_ones_kept(self):
         self._import("\n\n"
                      "- [ ] Item\n"

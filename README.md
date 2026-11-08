@@ -246,6 +246,12 @@ Content attribution:
 | Inside an item's subtree | that item's `issue.md` (nested block) |
 | After the last item's subtree | last item's `issue.md`, under `## Notes` |
 
+An item's subtree includes its **continuation lines**: any non-checkbox
+line indented deeper than the item itself (typically a `-> Done (date):
+...` note) belongs to that item's `issue.md`, never to the next item.
+Only prose at the same (or shallower) indent as the items becomes the
+next item's preceding content. (ADR-0006 amendment, 2026-11-08.)
+
 Leading/trailing blank lines of a region are trimmed; internal blank
 lines stay verbatim. `issue.md` is created **only** when there is
 content (preceding content, children, trailing notes, or an overlong

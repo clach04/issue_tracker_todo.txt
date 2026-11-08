@@ -12,3 +12,4 @@ add support to sync with GitHub issues @feature
 2026-11-07 sanity check AGENTS.md directives for todo in multiple models hash:4db29c8a
 2026-11-08 md2todo --flatten full recursive nesting mode (deferred from gfm-import plan) hash:68764906 +trackertool @feature
 2026-11-08 md2todo second import mode: top-level-only via explicit flag (deferred from gfm-import plan) hash:8c1cad08 +trackertool @feature
+2026-11-08 warn when the FIRST imported item captures non-empty preceding content hash:d6f26a8f +tracker

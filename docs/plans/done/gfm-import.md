@@ -1,6 +1,6 @@
 # GFM Task List Import (`md2todo.py`)
 
-Status: open
+Status: done 2026-11-08 - `md2todo.py` shipped (separate tool, top-level only); deferred items filed as hash:68764906 (`--flatten`) and hash:8c1cad08 (second import mode).
 
 Import a GitHub-Flavored Markdown file with task lists into the tracker.
 New tool `md2todo.py` that imports `todo.py` as a library (not a
@@ -143,10 +143,26 @@ is minted from the truncated title.
 
 ## TODOs spawned by this plan
 
-- [ ] Implement `md2todo.py` (parser, content attribution, issue.md
+- [x] Implement `md2todo.py` (parser, content attribution, issue.md
   assembly, state mapping, index/done writing, dry-run).
-- [ ] Tests for `md2todo.py` in `test_todo.py` (stdlib, py2/py3).
-- [ ] README section for the import tool.
-- [ ] (Deferred) `--flatten` full recursive nesting mode.
-- [ ] (Deferred) Second import mode: top-level-only via flag (`v1` is
-  top-level only by default; revisit whether a flag is needed).
+- [x] Tests for `md2todo.py` in `test_todo.py` (stdlib, py2/py3).
+- [x] README section for the import tool.
+- [x] (Deferred) `--flatten` full recursive nesting mode - hash:68764906.
+- [x] (Deferred) Second import mode: top-level-only via flag (`v1` is
+  top-level only by default; revisit whether a flag is needed) -
+  hash:8c1cad08.
+
+## Implementation notes (resolved at build time)
+
+- An overlong item with NO children would otherwise lose its full title
+  (the Index line is truncated, and "issue.md = the full title as plain
+  text" only spoke about overlong items that DO have children). It now
+  always gets an `issue.md`: plain full title when childless, `# <full
+  title>` + children block otherwise. Content-less SHORT items still get
+  no `issue.md`.
+- The budget for an overlong Index title is 200 chars of title, then
+  `...` is appended (so the visible title can be 203 chars). A single
+  long word with no space to cut at is hard-cut at 200.
+- A skipped empty item (`- [ ]` with no text) is not Content: its own
+  line never lands in a neighbouring issue's `preceding`/`## Notes`
+  region. Inside a nested block the slice stays verbatim.

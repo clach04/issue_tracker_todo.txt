@@ -32,6 +32,25 @@ title-substring identifier can only match the truncated text; the
 `hash:<hex>` form always resolves. The full title is preserved in
 `issue.md`.
 
+## Amendment 2026-11-08: continuation-line attribution
+
+The original attribution rules (above) defined an item's subtree by
+checkbox nesting only. A non-checkbox line indented under an item - a
+"Done (date): ..." note, a plain prose continuation - was invisible to
+the subtree boundary, so it fell into the NEXT item's preceding content.
+Real consequence (2026-11-08 real_test import): a done note ended up in
+the wrong `.issues/<hash>/issue.md`, and a headerless overlong-title
+body made the file look corrupt.
+
+**Amended rule: a non-checkbox, non-fenced line continues the nearest
+preceding item when it is indented deeper than that item's own indent.**
+Fenced content and blank lines inside a continuation run continue the
+item too. Outdented (unindented) prose between two items is unchanged:
+it stays the NEXT item's preceding content, matching the original
+attribution. Consequence: a checked item with a Done note now imports
+closed AND contentful (its notes live in its own issue.md) - the whole
+point of a Done note is that it documents that item.
+
 ## Considered Options
 
 - **Subcommand `todo.py import gfm <file>`**: rejected; import is a
