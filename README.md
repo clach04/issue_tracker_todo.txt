@@ -225,8 +225,9 @@ md2todo.py notes.md -p B --project backend --context bug
 ```
 
 **v1 imports top-level items only.** Nested items are not Issues: they
-are stored verbatim (dedented) in the parent's `.issues/<hash>/issue.md`,
-so nesting still has a permanent home. `--flatten` (every checkbox item
+are stored verbatim (original lines, indentation intact) in the parent's
+`.issues/<hash>/issue.md`, so nesting still has a permanent home.
+`--flatten` (every checkbox item
 at any depth becomes an Issue, child titles prefixed with the ancestor
 path) is reserved by name and **fails loudly** with "not implemented
 yet".
@@ -253,9 +254,14 @@ Only prose at the same (or shallower) indent as the items becomes the
 next item's preceding content. (ADR-0006 amendment, 2026-11-08.)
 
 Leading/trailing blank lines of a region are trimmed; internal blank
-lines stay verbatim. `issue.md` is created **only** when there is
-content (preceding content, children, trailing notes, or an overlong
-title). A content-less issue is its Index / Archive line alone.
+lines stay verbatim. The imported `issue.md` opens with the item's
+**original source block** - the `- [x]` checkbox line itself plus its
+subtree, exactly as authored (indentation intact, title/bullet
+duplicated on purpose, ADR-0006 amendment 2026-11-08b) - followed by
+preceding content, then trailing notes under `## Notes`. `issue.md` is
+created **only** when there is content (a subtree, preceding content,
+trailing notes, or an overlong title); a bare item with nothing under
+it is its Index / Archive line alone.
 
 State mapping: `[x]` / `[X]` imports **closed** (appended to `done.txt`
 as `x <today> <line> hash:<h>`, same as `close`), unless the item has
@@ -272,17 +278,23 @@ Titles over 200 characters are truncated in the Index line to 200 chars
 at a word boundary with `...` (three ASCII dots) appended, and the hash
 is minted from the **truncated** title. Consequence: a title-substring
 identifier can only match the truncated text; `hash:<hex>` always
-resolves. The full title is preserved in `issue.md` (as the header when
-the item has children, as plain text when it has none).
+resolves. The full title is preserved in `issue.md` (after the verbatim
+block).
 
 - Index lines append in file order (ADR-0004) and look exactly like
   `add`'s: `[priority?] [today] [title] hash:<h>`.
-- No dedup against existing Issues (same as `add`); hashes are minted
-  through the usual uniqueness retry against `todo.txt` + `done.txt`.
+- **Deterministic hashes** (ADR-0006 amendment 2026-11-08c): the hash
+  is `sha256(<truncated title>)` - title only, no timestamp - so
+  re-importing after a cleanup (`git checkout`) reproduces identical
+  hashes. Consequence: importing a title that is already in the tracker
+  fails loudly ("already in the tracker as hash:<hex>") instead of
+  silently minting a different hash; remove the old issue or rename the
+  item. Duplicates within one file get a deterministic `#N` retry
+  suffix. `todo.py add` / `hash` / close remain timestamp-based.
+- No dedup against existing Issues (same as `add`).
 - `--dry-run` prints one line per issue (`would create (open) line N:`
   / `would create (closed) -> done.txt:`) plus the `issue.md` paths it
-  would write, and warns that hashes will differ on later runs
-  (timestamp-based).
+  would write.
 - Failures are loud (exit 1): missing file, zero checklist items, plain
   `--flatten`.
 - An empty checkbox (`- [ ]` with no text) is skipped with a warning;

@@ -32,6 +32,35 @@ title-substring identifier can only match the truncated text; the
 `hash:<hex>` form always resolves. The full title is preserved in
 `issue.md`.
 
+## Amendment 2026-11-08b: verbatim block in issue.md
+
+Imported issue.md now leads with the item's ORIGINAL source lines - the
+`- [x]` checkbox line itself plus its subtree, exactly as authored,
+indentation intact, never dedented. The previous model stripped the
+checkbox line and dedented the rest under a `# <title>` header; reading
+the result next to the source was hard, and the headerless overlong
+special case made files look corrupt. Title/bullet duplication is
+accepted: the block's first line IS the title. A bare item (no subtree,
+no content) still gets no issue.md - a pure duplicate of the Index line
+is not content. When the issue has other content (preceding prose,
+notes) but its subtree is empty, the checkbox line still leads so every
+issue.md opens with the item itself.
+
+## Amendment 2026-11-08c: deterministic title-only hashes
+
+Import hashes derive from the (truncated) title ALONE - sha256 of the
+title, no timestamp. Re-importing after cleanup reproduces identical
+hashes, so an import can be debugged by edit/revert/re-run instead of
+hand-editing todo.txt. Consequences:
+
+- Re-importing unchanged content into a populated tracker fails loudly
+  ("already in the tracker as hash:<hex>") instead of silently minting
+  a different hash - silent re-minting would defeat reproducibility.
+- Duplicates within one file retry deterministically
+  (`sha256(title + " #N")`), same retry budget as todo.py's mints.
+- todo.py's `add` / `hash` / close-time mints stay timestamp-based:
+  interactive mints SHOULD differ for identical titles.
+
 ## Amendment 2026-11-08: continuation-line attribution
 
 The original attribution rules (above) defined an item's subtree by

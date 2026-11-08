@@ -10,13 +10,15 @@ mint_hash_unique, _all_hash_tokens, append_index_line, append_done_line).
 
 v1 model (plan docs/plans/gfm-import.md, moved to docs/plans/done/):
   - one Issue per TOP-LEVEL checklist item;
-  - nested items are stored verbatim (dedented) in the parent issue.md;
+  - nested items are stored verbatim in the parent issue.md (original
+    lines incl. the checkbox line itself, no dedent);
   - checked items import closed, except a checked item with any unchecked
     descendant imports open and records `originally: - [x]`.
 """
 from __future__ import print_function, unicode_literals
 
 import argparse
+import hashlib
 import io
 import os
 import re
@@ -28,6 +30,8 @@ TITLE_LIMIT = 200
 ELLIPSIS = '...'
 NOTES_HEADING = '## Notes'
 ORIGINALLY_CHECKED_LINE = 'originally: - [x]'
+# Same retry budget as todo.mint_hash_unique (todo.py, ADR-0003).
+MINT_ATTEMPTS = 10
 
 # Checkbox line: list marker (-, *, +, or ordered N. / N)) then [ ]/[x]/[X].
 # Group 1 = indentation, 2 = checkbox state, 3 = text after the checkbox.
@@ -260,29 +264,47 @@ def truncate_title(title):
             head = head[:cut]
     return head.rstrip() + ELLIPSIS
 
-def build_issue_body(title, originally_checked, preceding, nested, notes):
+def build_issue_body(title, originally_checked, verbatim_block, preceding,
+                     notes):
     """Assemble issue.md text, or None when there is nothing to store.
 
-    issue.md exists only for actual content (preceding content, children,
-    or trailing notes). An overlong title is content too: truncation makes
-    the Index line lossy, so the full title must live somewhere.
+    `verbatim_block` is the item's ORIGINAL source lines (the `- [x]`
+    line itself plus everything through its subtree), never dedented.
+    When present it leads the body and NO '# title' header is emitted:
+    the block's first line is the title, and the original block must be
+    readable exactly as authored, indentation included (ADR-0006
+    amendment 2026-11-08b; duplicating the title/bullet is accepted).
+
+    A block that carries nothing beyond the item's own checkbox line is
+    not content (a bare duplicate of the Index line would give every
+    contentless issue a Details Directory).
+
+    issue.md exists only for actual content (verbatim block, preceding
+    content, or trailing notes). An overlong title is content too:
+    truncation makes the Index line lossy, so the full title must live
+    somewhere.
     """
     overlong = len(title) > TITLE_LIMIT
-    if not (preceding or nested or notes or overlong):
+    block = list(verbatim_block or [])
+    # The bare checkbox line counts as content only when the issue has
+    # other content too (never alone: that is a pure Index duplicate).
+    extra_block = any(line.strip() for line in block[1:])
+    if not (extra_block or preceding or notes or overlong):
         return None
     parts = []
-    if overlong and not nested:
-        # Overlong item with no children: the full title is the body, no
-        # header (the Index line already carries the truncated form).
-        parts.append(title)
-    else:
+    if block:
+        parts.append('\n'.join(block))
+    elif not overlong:
+        # No original lines (defensive; the caller always passes the
+        # item's own line): fall back to a header so issue.md still
+        # names the issue.
         parts.append('# {}'.format(title))
+    if overlong:
+        parts.append(title)
     if originally_checked:
         parts.append(ORIGINALLY_CHECKED_LINE)
     if preceding:
         parts.append('\n'.join(preceding))
-    if nested:
-        parts.append('\n'.join(nested))
     if notes:
         parts.append('{}\n\n{}'.format(NOTES_HEADING, '\n'.join(notes)))
     return '\n\n'.join(parts) + '\n'
@@ -319,8 +341,13 @@ def build_plan(lines):
         body_end = min(_last_descendant_index(node, lines, fenced),
                        next_start - 1) + 1
         preceding = _region(lines, prev_body_end, node['index'], skip_lines)
-        nested = lines[node['index'] + 1:body_end]
-        nested = _dedent(_trim_blank(nested))
+        # The item's ORIGINAL source lines: the checkbox line itself plus
+        # everything through its subtree, verbatim (no dedent). The title
+        # and bullet are duplicated on purpose (ADR-0006 amendment
+        # 2026-11-08b): the reader sees the block exactly as authored.
+        verbatim_block = lines[node['index']:body_end]
+        while verbatim_block and not verbatim_block[-1].strip():
+            verbatim_block.pop()
         notes = []
         if pos + 1 == len(issues):
             notes = _region(lines, body_end, len(lines), skip_lines)
@@ -334,7 +361,7 @@ def build_plan(lines):
             'open': (not node['checked']) or unchecked_descendant,
             'issue_md': build_issue_body(node['title'],
                                          node['checked'] and unchecked_descendant,
-                                         preceding, nested, notes),
+                                         verbatim_block, preceding, notes),
         })
         prev_body_end = body_end
     return plan, warnings
@@ -363,15 +390,51 @@ def _next_index_line_number():
         existing += '\n'
     return existing.count('\n') + 1
 
+def _generate_title_hash(title):
+    """Deterministic 8-hex hash from the title ALONE (no timestamp).
+
+    md2todo-only (ADR-0006 amendment 2026-11-08c): re-importing the same
+    file twice must produce the same hashes, so an import can be debugged
+    with git checkout / re-runs instead of hand-editing todo.txt.
+    todo.py's add/hash/close stay timestamp-based: interactive mints
+    SHOULD differ even for identical titles.
+    """
+    hasher = hashlib.sha256()
+    hasher.update(title.encode('utf-8'))
+    return hasher.hexdigest()[:8]
+
+
 def run_import(plan, args, dry_run):
     """Mint, write issue.md / Index / Archive lines; return the counters."""
     taken = todo._all_hash_tokens()
+    preexisting = set(taken)
     next_line = _next_index_line_number()
     counts = {'open': 0, 'closed': 0, 'issue_md': 0}
     for item in plan:
         # Hash is minted from the TRUNCATED title: the Index line is the
-        # source of truth (ADR-0006).
-        issue_hash = todo.mint_hash_unique(item['index_title'], taken)
+        # source of truth (ADR-0006). Deterministic (title-only, no
+        # timestamp, md2todo amendment 2026-11-08c) so re-imports after a
+        # cleanup reproduce the same hashes.
+        #
+        # A base hash already in the tracker means this title was
+        # imported before: FAIL LOUDLY instead of silently minting a
+        # different hash (that would break reproducibility - the whole
+        # point of the amendment). The user cleans up (git checkout) or
+        # renames the item. Duplicates WITHIN one file get the
+        # deterministic '#N' suffix retry.
+        candidate = _generate_title_hash(item['index_title'])
+        if candidate in preexisting:
+            todo._fail("title {!r} is already in the tracker as hash:{};"
+                       " remove that issue first or rename the item"
+                       .format(item['index_title'], candidate))
+        attempts = 0
+        while candidate in taken:
+            attempts += 1
+            if attempts > MINT_ATTEMPTS:
+                todo._fail("could not mint a unique hash for {!r} after {} attempts".format(
+                    item['index_title'], MINT_ATTEMPTS))
+            candidate = _generate_title_hash('{} #{}'.format(item['index_title'], attempts))
+        issue_hash = candidate
         taken.add(issue_hash)
         index_line = todo.format_index_line(item['index_title'], issue_hash,
                                             priority=args.priority,
@@ -460,7 +523,9 @@ def main(argv=None):
     print("{} {} issue(s): {} open, {} closed; {} issue.md file(s)".format(
         verb, len(plan), counts['open'], counts['closed'], counts['issue_md']))
     if args.dry_run:
-        print("warning: hashes will differ on later runs (timestamp-based)")
+        print("note: hashes are deterministic (title-only); re-importing"
+              " unchanged content fails loudly until the tracker is"
+              " cleaned up (ADR-0006 amendment 2026-11-08c)")
 
 if __name__ == '__main__':
     main()

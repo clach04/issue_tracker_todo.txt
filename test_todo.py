@@ -1231,17 +1231,19 @@ class TestGfmImport(unittest.TestCase):
         lines = self._todo_lines()
         self.assertEqual(len(lines), 1, "children are not Issues: {!r}".format(lines))
         body = self._issue_md(lines[0])
+        # Verbatim block model (ADR-0006 amendment 2026-11-08b): the
+        # original lines lead the body, no dedent, no '# title' header
+        # (the checkbox line IS the title line); preamble follows.
         self.assertEqual(body,
-                         "# Parent\n"
+                         "- [ ] Parent\n"
+                         "  - [ ] child one\n"
+                         "  between children\n"
+                         "  - [x] child two\n"
                          "\n"
                          "# Title\n"
                          "\n"
-                         "Intro prose.\n"
-                         "\n"
-                         "- [ ] child one\n"
-                         "between children\n"
-                         "- [x] child two\n",
-                         "nested block is dedented, preamble is the preceding content")
+                         "Intro prose.\n",
+                         "verbatim block first, preamble as preceding content")
 
     def test_content_between_issues_precedes_the_later_one(self):
         self._import("- [ ] A\n"
@@ -1251,8 +1253,9 @@ class TestGfmImport(unittest.TestCase):
                      "- [ ] B\n")
         lines = self._todo_lines()
         self.assertEqual(len(lines), 2)
-        self.assertEqual(self._issue_md(lines[0]), "# A\n\n- [ ] a child\n")
-        self.assertEqual(self._issue_md(lines[1]), "# B\n\nprose before B\n")
+        self.assertEqual(self._issue_md(lines[0]), "- [ ] A\n  - [ ] a child\n")
+        self.assertEqual(self._issue_md(lines[1]), "- [ ] B\n\nprose before B\n")
+
 
     def test_eof_content_goes_to_last_issue_under_notes(self):
         self._import("- [ ] Only\n"
@@ -1260,7 +1263,7 @@ class TestGfmImport(unittest.TestCase):
                      "trailing one\n"
                      "trailing two\n")
         body = self._issue_md(self._todo_lines()[0])
-        self.assertEqual(body, "# Only\n\n## Notes\n\ntrailing one\ntrailing two\n")
+        self.assertEqual(body, "- [ ] Only\n\n## Notes\n\ntrailing one\ntrailing two\n")
 
     def test_indented_continuation_lines_attach_to_own_item(self):
         # Regression (real_test import, 2026-11-08): a "Done" note indented
@@ -1287,7 +1290,7 @@ class TestGfmImport(unittest.TestCase):
         lines = self._todo_lines()
         self.assertEqual(len(lines), 2)
         self.assertEqual(self._issue_md(lines[0]),
-                         "# A\n\n- [ ] child\n-> note for A\n")
+                         "- [ ] A\n  - [ ] child\n  -> note for A\n")
         self._no_issue_md(lines[1])
 
     def test_outdented_prose_between_items_still_precedes_next(self):
@@ -1298,7 +1301,7 @@ class TestGfmImport(unittest.TestCase):
                      "prose before B\n"
                      "- [ ] B\n")
         self._no_issue_md(self._todo_lines()[0])
-        self.assertEqual(self._issue_md(self._todo_lines()[1]), "# B\n\nprose before B\n")
+        self.assertEqual(self._issue_md(self._todo_lines()[1]), "- [ ] B\n\nprose before B\n")
 
     def test_continuation_lines_are_not_items_and_not_state(self):
         # An indented "  - not a checkbox" line (no [ ]/[x]) must not be
@@ -1308,7 +1311,7 @@ class TestGfmImport(unittest.TestCase):
                      "- [ ] B\n")
         lines = self._todo_lines()
         self.assertEqual(len(lines), 2)
-        self.assertEqual(self._issue_md(lines[0]), "# A\n\n- plain dash line\n")
+        self.assertEqual(self._issue_md(lines[0]), "- [ ] A\n  - plain dash line\n")
         self._no_issue_md(lines[1])
 
     def test_trailing_continuation_lines_go_to_notes_of_last_issue(self):
@@ -1338,7 +1341,7 @@ class TestGfmImport(unittest.TestCase):
                      "  note two\n"
                      "- [ ] B\n")
         self.assertEqual(self._issue_md(self._done_lines()[0]),
-                         "# A\n\nnote one\n\nnote two\n")
+                         "- [x] A\n  note one\n\n  note two\n")
         self._no_issue_md(self._todo_lines()[0])
 
     def test_blank_lines_trimmed_but_internal_ones_kept(self):
@@ -1351,9 +1354,17 @@ class TestGfmImport(unittest.TestCase):
                      "  - [ ] second\n"
                      "\n\n")
         body = self._issue_md(self._todo_lines()[0])
-        self.assertEqual(body, "# Item\n\n- [ ] first\n\n\n- [ ] second\n")
+        self.assertEqual(body,
+                         "- [ ] Item\n\n\n"
+                         "  - [ ] first\n"
+                         "\n"
+                         "\n"
+                         "  - [ ] second\n",
+                         "verbatim block keeps original indent and internal blank runs")
 
     def test_contentless_item_creates_no_issue_md(self):
+        # A bare checkbox line with no subtree/content is not a verbatim
+        # block worth storing (pure duplicate of the Index line).
         self._import("- [ ] bare\n")
         self._no_issue_md(self._todo_lines()[0])
         self.assertFalse(os.path.isdir(todo.ISSUES_DIR) and
@@ -1370,7 +1381,8 @@ class TestGfmImport(unittest.TestCase):
         self.assertEqual(len(done), 1)
         self.assertTrue(done[0].startswith("x "), "Archive format: {!r}".format(done[0]))
         self.assertIn("Done", done[0])
-        self.assertEqual(self._issue_md(done[0]), "# Done\n\n- [x] child\n   - [X] grandchild\n")
+        self.assertEqual(self._issue_md(done[0]),
+                         "- [x] Done\n  - [x] child\n     - [X] grandchild\n")
 
     def test_checked_with_unchecked_descendant_imports_open_with_originally(self):
         self._import("- [x] Parent\n"
@@ -1381,18 +1393,22 @@ class TestGfmImport(unittest.TestCase):
         self.assertEqual(self._done_lines(), [])
         body = self._issue_md(todo_lines[0])
         self.assertEqual(body,
-                         "# Parent\n\noriginally: - [x]\n\n- [x] done child\n- [ ] open grandchild\n",
-                         "the original checked state is recorded right after the header")
+                         "- [x] Parent\n"
+                         "  - [x] done child\n"
+                         "  - [ ] open grandchild\n"
+                         "\n"
+                         "originally: - [x]\n",
+                         "the original checked state is recorded after the verbatim block")
 
     def test_unchecked_imports_open_without_originally_record(self):
         self._import("- [ ] Todo\n  - [ ] child\n")
         body = self._issue_md(self._todo_lines()[0])
-        self.assertEqual(body, "# Todo\n\n- [ ] child\n")
+        self.assertEqual(body, "- [ ] Todo\n  - [ ] child\n")
         self.assertNotIn("originally:", body)
 
     # -- overlong titles -----------------------------------------------
 
-    def test_overlong_title_truncated_in_index_and_hash_from_truncation(self):
+    def test_overlong_title_truncated_in_index_and_hash_deterministic(self):
         title = " ".join("word{}".format(i) for i in range(60))
         self.assertGreater(len(title), md2todo.TITLE_LIMIT)
         self._import("- [ ] {}\n".format(title))
@@ -1405,34 +1421,35 @@ class TestGfmImport(unittest.TestCase):
         # Truncated at a word boundary: no partial word before the dots.
         self.assertNotIn("wor" + md2todo.ELLIPSIS, index_title)
         self.assertNotIn(u"\u2026", index_title, "ASCII dots only, never a Unicode ellipsis")
-        # Hash is minted from the truncated title (ADR-0006).
-        real_generate = todo.generate_hash
-        seen = []
-
-        def spy(t):
-            seen.append(t)
-            return real_generate(t)
-
-        todo.generate_hash = spy
-        try:
-            self._import("- [ ] {}\n".format(title))
-        finally:
-            todo.generate_hash = real_generate
-        self.assertEqual(len(seen), 1)
-        self.assertEqual(seen[0], index_title, "hash must be minted from the truncated title")
+        # Hash is minted from the truncated title (ADR-0006), title-only
+        # and deterministic (md2todo amendment 2026-11-08c): the same
+        # title produces the same hash, no timestamp involved.
+        self.assertEqual(md2todo._generate_title_hash(index_title),
+                         md2todo._generate_title_hash(index_title),
+                         "hash must be deterministic for identical titles")
+        self.assertEqual(todo._hash_of_line(line),
+                         md2todo._generate_title_hash(index_title))
+        # And a re-import of the same content FAILS LOUDLY (deterministic
+        # hash already taken; md2todo amendment 2026-11-08c).
+        first_hash = todo._hash_of_line(line)
+        out, err = self._import("- [ ] {}\n".format(title), expect_failure=True)
+        self.assertIn("already in the tracker as hash:" + first_hash, err)
+        self.assertEqual(len(self._todo_lines()), 1, "failed import wrote nothing")
 
     def test_overlong_title_without_children_issue_md_is_plain_title(self):
         title = " ".join("word{}".format(i) for i in range(60))
         self._import("- [ ] {}\n".format(title))
         body = self._issue_md(self._todo_lines()[0])
-        self.assertEqual(body, title + "\n", "full title, plain text, no header")
+        self.assertEqual(body, "- [ ] " + title + "\n\n" + title + "\n",
+                         "verbatim block leads, then the full title as content")
 
     def test_overlong_title_with_children_keeps_full_header(self):
         title = " ".join("word{}".format(i) for i in range(60))
         self._import("- [ ] {}\n  - [ ] kid\n".format(title))
         body = self._issue_md(self._todo_lines()[0])
-        self.assertEqual(body, "# {}\n\n- [ ] kid\n".format(title),
-                         "full title in the header, never truncated")
+        self.assertEqual(body,
+                         "- [ ] {}\n  - [ ] kid\n\n{}\n".format(title, title),
+                         "verbatim block first; the full title follows as content, never truncated")
 
     def test_truncate_exactly_at_limit_is_untouched(self):
         title = "a" * md2todo.TITLE_LIMIT
@@ -1463,7 +1480,8 @@ class TestGfmImport(unittest.TestCase):
         self.assertIn("child A", todo_lines[0])
         self.assertIn("child B", self._done_lines()[0])
         self.assertEqual(self._issue_md(todo_lines[0]),
-                         "# child A\n\n- [ ] grandchild of A\n")
+                         "   - [ ] child A\n      - [ ] grandchild of A\n",
+                         "promoted children keep their original indentation")
 
     def test_only_empty_items_fails_loudly(self):
         out, err = self._import("- [ ]\n- [x]\n", expect_failure=True)
@@ -1496,6 +1514,32 @@ class TestGfmImport(unittest.TestCase):
 
     # -- dry run -------------------------------------------------------
 
+    def test_deterministic_hash_is_title_only_and_reimport_fails_loudly(self):
+        # md2todo amendment 2026-11-08c: hashes derive from the (truncated)
+        # title alone, no timestamp, so debugging an import is reproducible.
+        out, _err = self._import("- [ ] alpha\n- [ ] beta\n")
+        self.assertEqual(todo._hash_of_line(self._todo_lines()[0]),
+                         md2todo._generate_title_hash("alpha"))
+        # Re-import without cleanup: the same title hashes to the same
+        # value, which is already taken -> loud failure, no silent
+        # re-mint, no writes.
+        _out, err = self._import("- [ ] alpha\n- [ ] gamma\n", expect_failure=True)
+        first = todo._hash_of_line(self._todo_lines()[0])
+        self.assertIn("already in the tracker as hash:" + first, err)
+        self.assertEqual(len(self._todo_lines()), 2,
+                         "alpha+beta from the first import; gamma must NOT be written")
+        self.assertNotIn("gamma", self._todo_lines()[-1])
+
+    def test_same_title_twice_in_one_file_gets_deterministic_suffix(self):
+        self._import("- [ ] dup\n- [ ] dup\n")
+        lines = self._todo_lines()
+        self.assertEqual(len(lines), 2)
+        hashes = [todo._hash_of_line(l) for l in lines]
+        self.assertEqual(hashes[0], md2todo._generate_title_hash("dup"))
+        self.assertNotEqual(hashes[0], hashes[1])
+        self.assertEqual(hashes[1], md2todo._generate_title_hash("dup #1"),
+                         "within-file duplicates retry deterministically")
+
     def test_dry_run_writes_nothing_and_prints_plan(self):
         out, _err = self._import("- [ ] open one\n"
                                  "- [x] closed one\n"
@@ -1505,7 +1549,7 @@ class TestGfmImport(unittest.TestCase):
         self.assertIn("would create (open) line 1: open one", out)
         self.assertIn("would create (closed) -> done.txt: closed one", out)
         self.assertIn("would create issue.md:", out)
-        self.assertIn("hashes will differ on later runs (timestamp-based)", out)
+        self.assertIn("hashes are deterministic (title-only)", out)
         self.assertIn("would import 3 issue(s)", out)
         self.assertEqual(self._todo_lines(), [], "dry run must not write the Index")
         self.assertEqual(self._done_lines(), [], "dry run must not write the Archive")
