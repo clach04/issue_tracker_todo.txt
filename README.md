@@ -212,6 +212,30 @@ TODO_NO_EDITOR=1 todo.py edit 3   # Error: editor launch disabled by $TODO_NO_ED
   `.issues/<hash>/` directory and no bootstrap `issue.md`.
 - Only `edit` reads it; no other command spawns an editor.
 
+## Commenting from stdin
+
+`comment` takes a comment body from Standard Input when the text
+argument is `-` (the Dash Marker):
+
+```text
+cat notes.md | todo.py comment hash:2d004b8f
+curl https://example.com/plot | todo.py comment hash:2d004b8f
+```
+
+- The body is read as **raw bytes** and written as-is: no encoding
+  validation, no newline normalization, no added header. The comment
+  file is `.issues/<hash>/comments/<timestamp>.md` as usual.
+- **Empty stdin** is an error (exit 1, no comment file created).
+- **Any text argument plus piped stdin** is a loud error (exit 1, no
+  comment file created): give one or the other. A text argument with
+  stdin *redirected* from a file or `/dev/null` also counts as piped
+  (`todo.py comment <id> "text" < /dev/null` errors); scripts that
+  redirect stdin should use `todo.py comment <id> "text"` under a
+  shell with no stdin redirect, or pass the body via stdin with `-`.
+- A literal `-` comment body is **not expressible** (accepted
+  limitation; use a longer wording or edit the file directly).
+- `comment` is the only command with stdin support.
+
 ## Importing a GFM task list (`md2todo.py`)
 
 `md2todo.py` converts a GitHub-Flavored Markdown checklist into Issues

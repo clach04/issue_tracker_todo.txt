@@ -55,3 +55,7 @@ _Avoid_: Todo list, markdown checklist
 **Editor Launch Suppressed**:
 The state in which `edit` starts no editor process, because the environment variable `TODO_NO_EDITOR` is non-empty. Editing an Issue is not disabled: `issue.md` stays writable by any other means. The command itself fails loudly (exit 1) before any Details Directory side effect.
 _Avoid_: Disabled editing, read-only issue, no-op edit, silent skip
+
+**Dash Marker**:
+The text argument `-` on `comment`: the comment body is read from Standard Input instead of the command line. A literal `-` body is not expressible; the conflict case (text arg plus piped input) is a loud error.
+_Avoid_: Stdin flag, pipe mode, dash option

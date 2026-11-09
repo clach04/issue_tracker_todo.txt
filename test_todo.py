@@ -313,6 +313,141 @@ class TestLocalIssueTracker(unittest.TestCase):
         body = self._read(os.path.join(comments_dir, name))
         self.assertIn("bumping pool size to 20", body)
 
+    # --- Dash Marker stdin support (docs/plans/comment-stdin.md) ---
+
+    def _fake_stdin(self, data):
+        # Replace sys.stdin with a fake piped stdin (isatty False).
+        # data is bytes; None means an empty pipe.
+        import io
+        buf = io.BytesIO(data if data is not None else b'')
+
+        class _FakeStdin(object):
+            def __init__(self, buffer):
+                self.buffer = buffer
+            def isatty(self):
+                return False
+        self._old_stdin = sys.stdin
+        sys.stdin = _FakeStdin(buf)
+        return buf
+
+    def _restore_stdin(self):
+        sys.stdin = self._old_stdin
+
+    def test_comment_dash_marker_reads_stdin(self):
+        issue_hash = self._add("Stdin comment issue")
+        self._fake_stdin(b'piped body line one\nline two\n')
+        try:
+            todo.cmd_comment(_ns(identifier="hash:"+issue_hash, text="-"))
+        finally:
+            self._restore_stdin()
+        comments_dir = os.path.join(todo.ISSUES_DIR, issue_hash, 'comments')
+        comment_files = os.listdir(comments_dir)
+        self.assertEqual(len(comment_files), 1)
+        # Raw bytes written as-is: no added newline, no normalization.
+        body = self._read(os.path.join(comments_dir, comment_files[0]))
+        self.assertEqual(body, 'piped body line one\nline two\n')
+
+    def test_comment_dash_marker_conflict_with_text_arg_fails(self):
+        issue_hash = self._add("Stdin conflict issue")
+        self._fake_stdin(b'piped body\n')
+        stderr = _capture_stderr()
+        old_stderr = sys.stderr
+        sys.stderr = stderr
+        try:
+            with self.assertRaises(SystemExit) as excinfo:
+                todo.cmd_comment(_ns(identifier="hash:"+issue_hash,
+                                     text="inline text"))
+        finally:
+            sys.stderr = old_stderr
+            self._restore_stdin()
+        self.assertEqual(excinfo.exception.code, 1)
+        out = _as_text(stderr)
+        self.assertIn("both a text argument", out)
+        self.assertIn("piped stdin", out)
+        # No comment file created on failure.
+        comments_dir = os.path.join(todo.ISSUES_DIR, issue_hash, 'comments')
+        self.assertFalse(os.path.exists(comments_dir))
+
+    def test_comment_dash_marker_empty_stdin_fails(self):
+        issue_hash = self._add("Stdin empty issue")
+        self._fake_stdin(b'')
+        stderr = _capture_stderr()
+        old_stderr = sys.stderr
+        sys.stderr = stderr
+        try:
+            with self.assertRaises(SystemExit) as excinfo:
+                todo.cmd_comment(_ns(identifier="hash:"+issue_hash, text="-"))
+        finally:
+            sys.stderr = old_stderr
+            self._restore_stdin()
+        self.assertEqual(excinfo.exception.code, 1)
+        out = _as_text(stderr)
+        self.assertIn("no stdin content", out)
+        comments_dir = os.path.join(todo.ISSUES_DIR, issue_hash, 'comments')
+        self.assertFalse(os.path.exists(comments_dir))
+
+    def test_comment_dash_marker_tty_stdin_fails(self):
+        issue_hash = self._add("Stdin tty issue")
+
+        class _TtyStdin(object):
+            def __init__(self, fallback):
+                self.buffer = fallback
+            def isatty(self):
+                return True
+        self._old_stdin = sys.stdin
+        # buffer points at an empty pipe so any read() is empty too.
+        import io
+        sys.stdin = _TtyStdin(io.BytesIO(b''))
+        stderr = _capture_stderr()
+        old_stderr = sys.stderr
+        sys.stderr = stderr
+        try:
+            with self.assertRaises(SystemExit) as excinfo:
+                todo.cmd_comment(_ns(identifier="hash:"+issue_hash, text="-"))
+        finally:
+            sys.stderr = old_stderr
+            sys.stdin = self._old_stdin
+        self.assertEqual(excinfo.exception.code, 1)
+        out = _as_text(stderr)
+        self.assertIn("stdin is a terminal", out)
+        comments_dir = os.path.join(todo.ISSUES_DIR, issue_hash, 'comments')
+        self.assertFalse(os.path.exists(comments_dir))
+
+    def test_comment_text_arg_with_piped_stdin_conflicts(self):
+        # The settled conflict rule: ANY text arg plus piped stdin is a
+        # loud error, not just the dash marker.
+        issue_hash = self._add("Stdin text conflict issue")
+        self._fake_stdin(b'piped body\n')
+        stderr = _capture_stderr()
+        old_stderr = sys.stderr
+        sys.stderr = stderr
+        try:
+            with self.assertRaises(SystemExit) as excinfo:
+                todo.cmd_comment(_ns(identifier="hash:"+issue_hash,
+                                     text="inline text"))
+        finally:
+            sys.stderr = old_stderr
+            self._restore_stdin()
+        self.assertEqual(excinfo.exception.code, 1)
+        out = _as_text(stderr)
+        self.assertIn("both a text argument", out)
+        comments_dir = os.path.join(todo.ISSUES_DIR, issue_hash, 'comments')
+        self.assertFalse(os.path.exists(comments_dir))
+
+    def test_comment_binary_stdin_bytes(self):
+        # Byte fidelity: non-UTF8 bytes pass through untouched.
+        issue_hash = self._add("Stdin binary issue")
+        raw = b'\xff\xfe binary-ish bytes \x00\x01\n'
+        self._fake_stdin(raw)
+        try:
+            todo.cmd_comment(_ns(identifier="hash:"+issue_hash, text="-"))
+        finally:
+            self._restore_stdin()
+        comments_dir = os.path.join(todo.ISSUES_DIR, issue_hash, 'comments')
+        name = os.listdir(comments_dir)[0]
+        with open(os.path.join(comments_dir, name), 'rb') as f:
+            self.assertEqual(f.read(), raw)
+
     def test_close_issue(self):
         issue_hash = self._add("Update documentation for API endpoints",
                                description="Needs OpenAPI 3.0 spec update.")

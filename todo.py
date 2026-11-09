@@ -527,9 +527,35 @@ def cmd_show(args):
                 print("  - {}".format(att))
     print("\n==================================================")
 
+DASH_MARKER = '-'
+
 def cmd_comment(args):
     ensure_environment()
     full_hash = resolve_identifier(args, args.identifier)
+
+    # Dash Marker (docs/plans/comment-stdin.md): '-' as the text arg
+    # means read the comment body from Standard Input. Conflict check
+    # BEFORE any side effect: no comment file is created on failure.
+    stdin_piped = not sys.stdin.isatty()
+    if stdin_piped and args.text not in (None, DASH_MARKER):
+        _fail("both a text argument ('{}') and piped stdin given; give "
+              "one or the other".format(args.text))
+    if args.text == DASH_MARKER:
+        # Fail fast rather than block on a TTY stdin (e.g. interactive
+        # shell with no pipe).
+        if sys.stdin.isatty():
+            _fail("Dash Marker '-' given but stdin is a terminal; pipe "
+                  "the comment body, e.g. cat file | todo.py comment "
+                  "<id> -")
+        # Read bytes, write binary: byte fidelity, no text-mode
+        # translation, no encoding validation. Empty stdin is an error.
+        data = sys.stdin.buffer.read()
+        if not data:
+            _fail("no stdin content (Dash Marker '-' expects a piped body)")
+        body = data
+    else:
+        body = args.text.encode('utf-8')
+
     issue_dir = _ensure_issue_dir(full_hash)
     comments_dir = os.path.join(issue_dir, 'comments')
     if not os.path.exists(comments_dir):
@@ -540,8 +566,8 @@ def cmd_comment(args):
     comment_filename = "{}.md".format(timestamp)
     comment_path = os.path.join(comments_dir, comment_filename)
 
-    with open(comment_path, 'w') as f:
-        f.write(args.text + "\n")
+    with open(comment_path, 'wb') as f:
+        f.write(body)
 
     print("Added comment to {} as {}".format(full_hash, comment_filename))
 
@@ -794,7 +820,7 @@ def main():
     # comment
     parser_comment = subparsers.add_parser('comment', parents=[common], help='Add a timestamped comment to an issue')
     parser_comment.add_argument('identifier', help='Issue identifier: hash:<hex>, line number, hash prefix, or title substring')
-    parser_comment.add_argument('text', help='Comment text')
+    parser_comment.add_argument('text', help="Comment text, or '-' to read the comment body from stdin")
 
     # close
     parser_close = subparsers.add_parser('close', parents=[common], help='Close an issue and archive it to done.txt')
