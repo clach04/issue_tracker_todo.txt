@@ -7,13 +7,13 @@
 option to ensure edit can be explictly disabled, i.e. not spawning editors under batch hash:4e083e78
 document common tags, `@techdebt` something new for docs hash:ae89067d
 review all ADRs for future todo ideas not captured in task list hash:448315fe
-add support to import from exported GitHub issues @feature
-add support to sync with GitHub issues @feature
+add support to import from exported GitHub issues @feature hash:f80b6577
+add support to sync with GitHub issues @feature hash:cfc7b903
 2026-11-07 sanity check AGENTS.md directives for todo in multiple models hash:4db29c8a
 2026-11-08 md2todo --flatten full recursive nesting mode (deferred from gfm-import plan) hash:68764906 +trackertool @feature
 2026-11-08 md2todo second import mode: top-level-only via explicit flag (deferred from gfm-import plan) hash:8c1cad08 +trackertool @feature
 2026-11-08 warn when the FIRST imported item captures non-empty preceding content hash:d6f26a8f +tracker
-(A) 2026-11-08 TODO.md conversion bug. see https://github.com/clach04/codgent/commit/b9dc1a0910b7cfa9421cf969e116bce4765012a3 where TODO.md had to be restored, many non-child issues ended up in a issues.md @bug
-(B) 2026-11-08 a web UI for reading (and writting/editing) todo.txt and .issue resources would be REALLY helpful. v1 to implement "show" by clicking on todo.txt entries would be a good starting point
-(B) 2026-11-08 research into whether a coding agent skill or tool (rather than using bash) would be useful (for example, tool for codgent)
-(A) test if `todo.py comment` can take in stdin input, e.g. `cat some files | todo.py comment`, `curl URL | todo.py comment`
+(A) 2026-11-08 TODO.md conversion bug. see https://github.com/clach04/codgent/commit/b9dc1a0910b7cfa9421cf969e116bce4765012a3 where TODO.md had to be restored, many non-child issues ended up in a issues.md @bug hash:6e6ac366
+(B) 2026-11-08 a web UI for reading (and writting/editing) todo.txt and .issue resources would be REALLY helpful. v1 to implement "show" by clicking on todo.txt entries would be a good starting point hash:51e9e387
+(B) 2026-11-08 research into whether a coding agent skill or tool (rather than using bash) would be useful (for example, tool for codgent) hash:8a99860a
+(A) test if `todo.py comment` can take in stdin input, e.g. `cat some files | todo.py comment`, `curl URL | todo.py comment` hash:2d004b8f
