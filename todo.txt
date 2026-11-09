@@ -13,3 +13,4 @@ add support to sync with GitHub issues @feature
 2026-11-08 md2todo --flatten full recursive nesting mode (deferred from gfm-import plan) hash:68764906 +trackertool @feature
 2026-11-08 md2todo second import mode: top-level-only via explicit flag (deferred from gfm-import plan) hash:8c1cad08 +trackertool @feature
 2026-11-08 warn when the FIRST imported item captures non-empty preceding content hash:d6f26a8f +tracker
+(A) 2026-11-08 TODO.md conversion bug. see https://github.com/clach04/codgent/commit/b9dc1a0910b7cfa9421cf969e116bce4765012a3 where TODO.md had to be restored, many non-child issues ended up in a issues.md @bug
