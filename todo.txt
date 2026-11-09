@@ -17,4 +17,5 @@ add support to sync with GitHub issues @feature hash:cfc7b903
 (B) 2026-11-08 a web UI for reading (and writting/editing) todo.txt and .issue resources would be REALLY helpful. v1 to implement "show" by clicking on todo.txt entries would be a good starting point hash:51e9e387
 (B) 2026-11-08 research into whether a coding agent skill or tool (rather than using bash) would be useful (for example, tool for codgent) hash:8a99860a
 (A) `todo.py comment` enhancement(s) take in stdin input, e.g. `cat some files | todo.py comment`, `curl URL | todo.py comment` hash:2d004b8f
+readme doc bug `Line numbers are stable for life. A number copied from any list output addresses the same Index line forever; a later add never renumbers an existing issue.` is not accurate. Closing moves to done.txt ergo NOT "stable for life", external tools nor edits also break this promise in the readme (this line was added by hand as a text file edit) @doc @bug
 2026-11-08 `todo.py help` should behave as if `todo.py --help` had been issued hash:eb1deb21
