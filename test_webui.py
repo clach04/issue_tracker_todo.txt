@@ -119,6 +119,56 @@ class TestWebUI(unittest.TestCase):
         # Open issue: no closed badge.
         self.assertNotIn('class="badge">closed', text)
 
+    def test_show_page_md_pre_tags_and_scripts(self):
+        # Show pages tag markdown blocks for the bootstrap and reference the
+        # vendored markdown-it + bootstrap (ADR-0008).
+        h = self._add('md issue', description='**bold** text')
+        todo.cmd_comment(_ns(identifier=h, text='plain comment', verbose=False))
+        status, headers, body = _call(_environ('/show/' + h))
+        self.assertEqual(status, '200 OK')
+        text = body.decode('utf-8')
+        self.assertIn('<pre class="md">**bold** text</pre>', text)
+        self.assertIn('<pre class="md">plain comment</pre>', text)
+        self.assertIn('src="/static/markdown-it-14.1.0.min.js"', text)
+        self.assertIn('src="/static/webui.js"', text)
+        # Metadata block (hash/index line) is NOT markdown-rendered.
+        self.assertIn('<pre>Issue Hash :', text)
+        self.assertNotIn('<pre class="md">Issue Hash', text)
+
+    def test_non_md_pages_have_no_scripts(self):
+        # Index and error pages carry no markdown assets.
+        self._add('an issue')
+        for path in ('/', '/show/abc', '/nope'):
+            status, headers, body = _call(_environ(path))
+            text = body.decode('utf-8')
+            self.assertNotIn('<script', text, 'script on {}'.format(path))
+            self.assertNotIn('<pre class="md"', text,
+                             'md block on {}'.format(path))
+
+    def test_static_serves_markdown_it_and_bootstrap(self):
+        status, headers, body = _call(_environ('/static/webui.js'))
+        self.assertEqual(status, '200 OK')
+        self.assertEqual(headers['Content-Type'], 'text/javascript; charset=utf-8')
+        self.assertIn('Cache-Control', headers)
+        self.assertIn('markdown-it', body.decode('utf-8'))
+        status, headers, body = _call(
+            _environ('/static/markdown-it-14.1.0.min.js'))
+        self.assertEqual(status, '200 OK')
+        self.assertEqual(headers['Content-Type'], 'text/javascript; charset=utf-8')
+        self.assertIn('Cache-Control', headers)
+        self.assertGreater(len(body), 100000)  # vendored minified library
+
+    def test_static_unknown_asset_404(self):
+        # Only the known files are served; no user-controlled filenames.
+        status, headers, body = _call(_environ('/static/nope.js'))
+        self.assertEqual(status, '404 Not Found')
+        status, headers, body = _call(
+            _environ('/static/markdown-it-99.9.9.min.js'))
+        self.assertEqual(status, '404 Not Found')
+        # Traversal: regex only matches a single segment, so no '..' path.
+        status, headers, body = _call(_environ('/static/..%2Ftodo.py'))
+        self.assertEqual(status, '404 Not Found')
+
     def test_show_page_closed_badge(self):
         h = self._add('closing issue', description='will close')
         todo.cmd_close(_ns(identifier=h, verbose=False))

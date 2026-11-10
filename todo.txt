@@ -20,7 +20,6 @@ readme doc bug `Line numbers are stable for life. A number copied from any list 
 2026-11-08 $EDITOR-driven comment creation and editing for todo.py comment hash:4e270ef0 +trackertool @feature
 2026-11-08 todo.py add -d description from stdin hash:fef2d86f +trackertool @feature
 2026-11-08 todo.py comment stdin: consider text-mode stdin handling hash:cbe3727f +trackertool @techdebt
-2026-11-09 Web UI: render issue.md and comments as markdown, not escaped pre hash:e072da96 +trackertool @feature
 2026-11-08 Openrouter per session, not stored on disk and provided by UI? Idea that can create a token just for one session with both expiry date and budget
 2026-11-08 many plans / md files in root. Cleanup, likely move to plans done?
 2026-11-08 py27 htmllib already present, explain issue rather than fixing
@@ -36,3 +35,4 @@ readme doc bug `Line numbers are stable for life. A number copied from any list 
 2026-11-08 html (no script) support from model for display - also see markdown request
 2026-11-09 text UI, see video https://youtu.be/3qspSSbDGZ4?si=nJMaSwNUEFseXul6 using c and printf with terminal (so likely not windows) as well as obvious curses/ TUI
 (A) 2026-11-09 web UI on mobile with ask question, tool-tip NOT visible, can not see recommendations or deeper details
+2026-11-10 web UI: syntax highlighting for code fences and todo.txt/done.txt (client-side) hash:0a7d7e68 +trackertool @feature

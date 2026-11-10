@@ -11,6 +11,8 @@ Routes (read-only v1, docs/plans/webui.md):
   /show/<hash>                      - show page (prefix allowed)
   /show?line=<n>                    - show by todo.txt Index line (open only)
   /show/<hash>/attachments/<name>   - serve attachment bytes
+  /static/<name>                    - static assets (vendored markdown-it,
+                                      first-party bootstrap; ADR-0008)
 """
 from __future__ import print_function, unicode_literals
 
@@ -65,11 +67,26 @@ PAGE_STYLE = (
 )
 
 SHOW_RE = re.compile(r'^/show/([^/]+)(?:/attachments/(.+))?$')
+STATIC_RE = re.compile(r'^/static/([^/]+)$')
 
-# TODO: deferred markdown rendering - issue.md and comment bodies are
-# rendered as HTML-escaped plain text in a <pre> block. A minimal
-# stdlib markdown converter (or client-side renderer) is deferred; see
-# tracker issue e072da96 (docs/plans/webui.md).
+# Vendored markdown-it, pinned version (ADR-0008). Versioned filename so
+# updates require replacing this file and bumping the constant.
+VENDOR_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          'tools', 'vendor')
+MARKDOWN_IT_VERSION = '14.1.0'
+MARKDOWN_IT_FILE = 'markdown-it-{}.min.js'.format(MARKDOWN_IT_VERSION)
+BOOTSTRAP_FILE = 'webui.js'
+
+# Markdown rendering is client-side: markdown-it with html:false (all raw
+# HTML in the corpus is data placeholders, escaped), linkify:false, and
+# link sanitization (http/https/mailto only) in the bootstrap. Server
+# sends the escaped <pre> fallback (ADR-0008).
+
+
+def _md_pre(content):
+    # class="md" marks the block for the bootstrap; error pages etc. use
+    # plain <pre> and stay untouched.
+    return '<pre class="md">{}</pre>'.format(_html_escape(content))
 
 
 FOOTER_BANNER = (
@@ -78,19 +95,30 @@ FOOTER_BANNER = (
 )
 
 
-def _page(title, body):
+def _page(title, body, md=False):
+    # md=True: show pages reference the bootstrap + vendored markdown-it
+    # (ADR-0008). Other pages (index, errors) skip them entirely.
+    script = ''
+    if md:
+        script = ('<script src="/static/markdown-it-{}.min.js"></script>'
+                  '<script src="/static/{}" defer></script>'.format(
+                      MARKDOWN_IT_VERSION, BOOTSTRAP_FILE))
     return ('<!DOCTYPE html>\n<html><head><meta charset="utf-8">'
             '<title>{}</title>'.format(_html_escape(title))
             + PAGE_STYLE
+            + script
             + '</head><body>\n{}\n{}\n</body></html>'.format(
                 body, FOOTER_BANNER))
 
 
-def _respond(status, body, content_type=TEXT_HTML):
+def _respond(status, body, content_type=TEXT_HTML, extra_headers=None):
     if isinstance(body, type(u'')):
         body = body.encode('utf-8')
-    return status, [('Content-Type', content_type),
-                    ('Content-Length', str(len(body)))], body
+    headers = [('Content-Type', content_type),
+               ('Content-Length', str(len(body)))]
+    if extra_headers:
+        headers.extend(extra_headers)
+    return status, headers, body
 
 
 def _error_page(status, detail):
@@ -229,8 +257,7 @@ def _show_by_hash(h):
     issue_md_path = os.path.join(issue_dir, 'issue.md')
     if os.path.exists(issue_md_path):
         parts.append('<h2>Description</h2>')
-        parts.append('<pre>{}</pre>'.format(
-            _html_escape(_read_text(issue_md_path).strip())))
+        parts.append(_md_pre(_read_text(issue_md_path).strip()))
     comments_dir = os.path.join(issue_dir, 'comments')
     if os.path.isdir(comments_dir):
         comment_files = sorted(glob.glob(os.path.join(comments_dir, '*.md')))
@@ -239,8 +266,7 @@ def _show_by_hash(h):
             for cf in comment_files:
                 c_name = os.path.splitext(os.path.basename(cf))[0]
                 parts.append('<h3>[{}]</h3>'.format(_html_escape(c_name)))
-                parts.append('<pre>{}</pre>'.format(
-                    _html_escape(_read_text(cf).strip())))
+                parts.append(_md_pre(_read_text(cf).strip()))
     attachments_dir = os.path.join(issue_dir, 'attachments')
     if os.path.isdir(attachments_dir):
         attachments = sorted(os.listdir(attachments_dir))
@@ -252,7 +278,31 @@ def _show_by_hash(h):
                                             _html_escape(att)))
             parts.append('</ul>')
     parts.append('<p><a href="/">back</a></p>')
-    return _respond('200 OK', _page(title, '\n'.join(parts)))
+    return _respond('200 OK', _page(title, '\n'.join(parts), md=True))
+
+
+def _serve_static(name):
+    # Static assets: first-party bootstrap + vendored libraries. White-list
+    # (no user-controlled filenames): only files we know about are served.
+    if name == BOOTSTRAP_FILE:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            BOOTSTRAP_FILE)
+    elif name == MARKDOWN_IT_FILE:
+        path = os.path.join(VENDOR_DIR, MARKDOWN_IT_FILE)
+    else:
+        return _error_page('404 Not Found',
+                           'Unknown static asset: {!r}'.format(name))
+    if not os.path.isfile(path):
+        return _error_page('404 Not Found',
+                           'Static asset missing from disk: {!r}'.format(name))
+    with open(path, 'rb') as f:
+        data = f.read()
+    if name.endswith('.js'):
+        content_type = 'text/javascript; charset=utf-8'
+    else:
+        content_type = 'application/octet-stream'
+    return _respond('200 OK', data, content_type,
+                    extra_headers=[('Cache-Control', 'max-age=3600')])
 
 
 def _serve_attachment(token, name):
@@ -302,6 +352,9 @@ def _dispatch(environ):
         if att:
             return _serve_attachment(token, att)
         return _show_page(token, query)
+    m = STATIC_RE.match(path)
+    if m:
+        return _serve_static(m.group(1))
     return _error_page('404 Not Found', 'Unknown path: {!r}'.format(path))
 
 
