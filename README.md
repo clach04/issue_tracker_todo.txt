@@ -218,8 +218,8 @@ TODO_NO_EDITOR=1 todo.py edit 3   # Error: editor launch disabled by $TODO_NO_ED
 argument is `-` (the Dash Marker):
 
 ```text
-cat notes.md | todo.py comment hash:2d004b8f
-curl https://example.com/plot | todo.py comment hash:2d004b8f
+cat notes.md | todo.py comment hash:XXXXXXXX
+curl https://example.com/plot | todo.py comment hash:XXXXXXXX
 ```
 
 - The body is read as **raw bytes** and written as-is: no encoding
