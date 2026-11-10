@@ -130,6 +130,7 @@ class TestWebUI(unittest.TestCase):
         self.assertIn('<pre class="md">**bold** text</pre>', text)
         self.assertIn('<pre class="md">plain comment</pre>', text)
         self.assertIn('src="/static/markdown-it-14.1.0.min.js"', text)
+        self.assertIn('src="/static/highlight-11.9.0.min.js"', text)
         self.assertIn('src="/static/webui.js"', text)
         # Metadata block (hash/index line) is NOT markdown-rendered.
         self.assertIn('<pre>Issue Hash :', text)
@@ -165,9 +166,29 @@ class TestWebUI(unittest.TestCase):
         status, headers, body = _call(
             _environ('/static/markdown-it-99.9.9.min.js'))
         self.assertEqual(status, '404 Not Found')
+        status, headers, body = _call(
+            _environ('/static/highlight-99.9.9.min.js'))
+        self.assertEqual(status, '404 Not Found')
         # Traversal: regex only matches a single segment, so no '..' path.
         status, headers, body = _call(_environ('/static/..%2Ftodo.py'))
         self.assertEqual(status, '404 Not Found')
+
+    def test_static_serves_highlight_js(self):
+        status, headers, body = _call(
+            _environ('/static/highlight-11.9.0.min.js'))
+        self.assertEqual(status, '200 OK')
+        self.assertEqual(headers['Content-Type'], 'text/javascript; charset=utf-8')
+        self.assertIn('Cache-Control', headers)
+        text = body.decode('utf-8')
+        self.assertIn('Highlight.js', text)
+        self.assertGreater(len(body), 100000)  # vendored minified library
+
+    def test_show_page_has_token_styles(self):
+        # Minimal highlight.js token colors are in the page style.
+        h = self._add('style issue')
+        status, headers, body = _call(_environ('/show/' + h))
+        self.assertEqual(status, '200 OK')
+        self.assertIn('.hljs-keyword', body.decode('utf-8'))
 
     def test_show_page_closed_badge(self):
         h = self._add('closing issue', description='will close')

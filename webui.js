@@ -19,7 +19,21 @@
     if (!MarkdownIt) {
       return; // fallback: server-sent escaped <pre> blocks remain
     }
-    var md = MarkdownIt({html: false, linkify: false, breaks: false});
+    var md = MarkdownIt({
+      html: false,
+      linkify: false,
+      breaks: false,
+      // ADR-0009: highlight tagged code fences via vendored highlight.js.
+      // Known language -> highlighted HTML (markdown-it wraps it verbatim).
+      // Unknown or missing language -> empty string, markdown-it escapes
+      // the code as plain text. No autodetection.
+      highlight: function (code, lang) {
+        if (window.hljs && lang && window.hljs.getLanguage(lang)) {
+          return window.hljs.highlight(code, {language: lang}).value;
+        }
+        return '';
+      }
+    });
     // ADR-0008: override the default validateLink (which also allows ftp:,
     // data:, and file:). Only http/https/mailto are allowed; anything else
     // is not a link token and renders as escaped plain text.

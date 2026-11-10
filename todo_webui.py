@@ -63,6 +63,15 @@ PAGE_STYLE = (
     'white-space: pre-wrap; }'
     '.badge { color: #fff; background: #a00; padding: 0 6px; }'
     '.footer { font-size: 0.75em; margin-top: 2em; }'
+    # Minimal highlight.js token colors (subset of github-dark theme).
+    '.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-section, '
+    '.hljs-doctag { color: #d73a49; }'
+    '.hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute, '
+    '.hljs-meta .hljs-string { color: #032f62; }'
+    '.hljs-comment, .hljs-quote, .hljs-deletion, .hljs-meta { color: #6a737d; }'
+    '.hljs-number, .hljs-variable, .hljs-template-variable, .hljs-type, '
+    '.hljs-selector-class, .hljs-selector-attr, .hljs-selector-pseudo, '
+    '.hljs-title { color: #005cc5; }'
     '</style>'
 )
 
@@ -75,6 +84,8 @@ VENDOR_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           'tools', 'vendor')
 MARKDOWN_IT_VERSION = '14.1.0'
 MARKDOWN_IT_FILE = 'markdown-it-{}.min.js'.format(MARKDOWN_IT_VERSION)
+HIGHLIGHT_VERSION = '11.9.0'
+HIGHLIGHT_FILE = 'highlight-{}.min.js'.format(HIGHLIGHT_VERSION)
 BOOTSTRAP_FILE = 'webui.js'
 
 # Markdown rendering is client-side: markdown-it with html:false (all raw
@@ -101,8 +112,10 @@ def _page(title, body, md=False):
     script = ''
     if md:
         script = ('<script src="/static/markdown-it-{}.min.js"></script>'
+                  '<script src="/static/highlight-{}.min.js"></script>'
                   '<script src="/static/{}" defer></script>'.format(
-                      MARKDOWN_IT_VERSION, BOOTSTRAP_FILE))
+                      MARKDOWN_IT_VERSION, HIGHLIGHT_VERSION,
+                      BOOTSTRAP_FILE))
     return ('<!DOCTYPE html>\n<html><head><meta charset="utf-8">'
             '<title>{}</title>'.format(_html_escape(title))
             + PAGE_STYLE
@@ -289,6 +302,8 @@ def _serve_static(name):
                             BOOTSTRAP_FILE)
     elif name == MARKDOWN_IT_FILE:
         path = os.path.join(VENDOR_DIR, MARKDOWN_IT_FILE)
+    elif name == HIGHLIGHT_FILE:
+        path = os.path.join(VENDOR_DIR, HIGHLIGHT_FILE)
     else:
         return _error_page('404 Not Found',
                            'Unknown static asset: {!r}'.format(name))
