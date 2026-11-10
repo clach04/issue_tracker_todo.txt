@@ -60,6 +60,7 @@ PAGE_STYLE = (
     'pre { background: #f4f4f4; border: 1px solid #ccc; padding: 0.5em; '
     'white-space: pre-wrap; }'
     '.badge { color: #fff; background: #a00; padding: 0 6px; }'
+    '.footer { font-size: 0.75em; margin-top: 2em; }'
     '</style>'
 )
 
@@ -71,11 +72,18 @@ SHOW_RE = re.compile(r'^/show/([^/]+)(?:/attachments/(.+))?$')
 # tracker issue e072da96 (docs/plans/webui.md).
 
 
+FOOTER_BANNER = (
+    '<div class="footer"><a href="https://github.com/clach04/issue_tracker_todo.txt"'
+    '>issue_tracker_todo.txt</a></div>'
+)
+
+
 def _page(title, body):
     return ('<!DOCTYPE html>\n<html><head><meta charset="utf-8">'
             '<title>{}</title>'.format(_html_escape(title))
             + PAGE_STYLE
-            + '</head><body>\n{}\n</body></html>'.format(body))
+            + '</head><body>\n{}\n{}\n</body></html>'.format(
+                body, FOOTER_BANNER))
 
 
 def _respond(status, body, content_type=TEXT_HTML):

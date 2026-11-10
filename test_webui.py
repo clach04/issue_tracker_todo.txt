@@ -77,6 +77,21 @@ class TestWebUI(unittest.TestCase):
         self.assertIn('first issue', text)
         self.assertIn('second issue', text)
 
+    def test_footer_banner_on_every_page(self):
+        # GitHub project link banner at the bottom of each page.
+        self._add('an issue')
+        for path in ('/', '/show/abc', '/show/abc/attachments/x',
+                     '/nope', '/show?line=999'):
+            status, headers, body = _call(_environ(path))
+            text = body.decode('utf-8')
+            self.assertIn(
+                'href="https://github.com/clach04/issue_tracker_todo.txt"',
+                text, 'footer missing on {}'.format(path))
+            self.assertIn('class="footer"', text, 'footer missing on {}'.format(path))
+            self.assertGreater(text.rindex('class="footer"'),
+                               text.rindex('<h1>'),
+                               'footer should be near bottom of page')
+
     def test_list_page_unhashed_line_plain_text(self):
         with open(todo.TODO_FILE, 'a') as f:
             f.write('hand written line without hash <a b>\n')
