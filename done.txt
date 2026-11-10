@@ -15,3 +15,4 @@ x 2026-11-07 (C) 2026-11-06 Implement list --sort hash:8d8ab446 +trackertool @fe
 x 2026-11-07 2026-11-07 add prepends to todo.txt, so every add renumbers the Index hash:6fdb5271 +trackertool @techdebt
 x 2026-11-08 2026-11-08 md2todo _write_issue_md writes without explicit UTF-8 encoding (cp1252 mangling on Windows/py2) hash:5a2198a8 +tracker
 x 2026-11-08 (A) `todo.py comment` enhancement(s) take in stdin input, e.g. `cat some files | todo.py comment`, `curl URL | todo.py comment` hash:2d004b8f
+x 2026-11-09 (B) 2026-11-08 a web UI for reading (and writting/editing) todo.txt and .issue resources would be REALLY helpful. v1 to implement "show" by clicking on todo.txt entries would be a good starting point hash:51e9e387
