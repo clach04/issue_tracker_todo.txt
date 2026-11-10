@@ -137,14 +137,59 @@ class TestWebUI(unittest.TestCase):
         self.assertNotIn('<pre class="md">Issue Hash', text)
 
     def test_non_md_pages_have_no_scripts(self):
-        # Index and error pages carry no markdown assets.
+        # Error pages carry no assets; the index carries the todotxt set
+        # (highlight.js + bootstrap, no markdown-it) per ADR-0010.
         self._add('an issue')
-        for path in ('/', '/show/abc', '/nope'):
+        status, headers, body = _call(_environ('/'))
+        text = body.decode('utf-8')
+        self.assertIn('src="/static/highlight-11.9.0.min.js"', text)
+        self.assertIn('src="/static/webui.js"', text)
+        self.assertNotIn('markdown-it', text)
+        self.assertNotIn('<pre class="md"', text)
+        for path in ('/show/abc', '/nope'):
             status, headers, body = _call(_environ(path))
             text = body.decode('utf-8')
             self.assertNotIn('<script', text, 'script on {}'.format(path))
             self.assertNotIn('<pre class="md"', text,
                              'md block on {}'.format(path))
+
+    def test_index_highlights_todotxt_tokens(self):
+        # List lines are wrapped in span.todotxt for the client-side
+        # grammar (ADR-0010); hashed lines link to the show page.
+        self._add('todo.txt line with (A) priority +proj @ctx')
+        status, headers, body = _call(_environ('/'))
+        self.assertEqual(status, '200 OK')
+        text = body.decode('utf-8')
+        self.assertIn('<span class="todotxt">', text)
+        self.assertIn('(A)', text)
+        self.assertIn('+proj', text)
+        self.assertIn('@ctx', text)
+        self.assertIn('.hljs-todo-pri-a', text)
+        self.assertIn('.hljs-todo-hash', text)
+
+    def test_index_done_section_collapsed(self):
+        # done.txt is listed under a collapsed <details> with the same
+        # grammar (ADR-0010).
+        h = self._add('doomed issue')
+        todo.cmd_close(_ns(identifier=h, verbose=False))
+        status, headers, body = _call(_environ('/'))
+        self.assertEqual(status, '200 OK')
+        text = body.decode('utf-8')
+        self.assertIn('<details><summary>Closed Issues (done.txt)</summary>', text)
+        self.assertIn('<span class="todotxt">x 2026-', text)
+        self.assertIn('doomed issue', text)
+        done_part = text[text.rindex('Closed Issues'):]
+        self.assertNotIn('href="/show/', done_part,
+                         'done.txt lines should not be links')
+
+    def test_index_done_section_absent_when_empty(self):
+        # Fresh dir: no done.txt -> no details section.
+        self._add('only issue')
+        status, headers, body = _call(_environ('/'))
+        self.assertEqual(status, '200 OK')
+        text = body.decode('utf-8')
+        self.assertNotIn('<details>', text)
+        self.assertNotIn('Closed Issues', text)
 
     def test_static_serves_markdown_it_and_bootstrap(self):
         status, headers, body = _call(_environ('/static/webui.js'))
@@ -189,6 +234,23 @@ class TestWebUI(unittest.TestCase):
         status, headers, body = _call(_environ('/show/' + h))
         self.assertEqual(status, '200 OK')
         self.assertIn('.hljs-keyword', body.decode('utf-8'))
+
+    def test_grammar_class_names_no_double_prefix(self):
+        # highlight.js prepends its own classPrefix ("hljs-") to grammar
+        # classNames, so grammar modes must use bare names (e.g. "todo-hash"
+        # -> emitted as "hljs-todo-hash"). A grammar-level "hljs-" prefix
+        # produced "hljs-hljs-todo-..." and styled nothing. Regression test.
+        # webui.js lives next to todo_webui.py, not the test cwd.
+        js_path = os.path.join(os.path.dirname(
+            os.path.abspath(todo_webui.__file__)), 'webui.js')
+        with open(js_path) as f:
+            js = f.read()
+        self.assertNotIn("className: 'hljs-", js,
+                         'grammar class names must not carry the hljs- '
+                         'prefix (highlight.js adds it)')
+        self.assertIn("className: 'todo-hash'", js)
+        # CSS must match the emitted names (hljs- + grammar name).
+        self.assertIn('.hljs-todo-hash', todo_webui.PAGE_STYLE)
 
     def test_show_page_closed_badge(self):
         h = self._add('closing issue', description='will close')

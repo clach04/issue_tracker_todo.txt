@@ -72,6 +72,20 @@ PAGE_STYLE = (
     '.hljs-number, .hljs-variable, .hljs-template-variable, .hljs-type, '
     '.hljs-selector-class, .hljs-selector-attr, .hljs-selector-pseudo, '
     '.hljs-title { color: #005cc5; }'
+    # todo.txt/done.txt grammar tokens (ADR-0010): traffic-light priorities,
+    # hash: special color, key:value, project, context, date, URL.
+    '.hljs-todo-pri-a { color: #d73a49; font-weight: bold; }'
+    '.hljs-todo-pri-b { color: #e36209; font-weight: bold; }'
+    '.hljs-todo-pri-c { color: #b08800; font-weight: bold; }'
+    '.hljs-todo-hash { color: #6f42c1; font-weight: bold; }'
+    '.hljs-todo-keyval { color: #22863a; }'
+    '.hljs-todo-project { color: #005cc5; }'
+    '.hljs-todo-context { color: #d73a49; }'
+    '.hljs-todo-date { color: #57606a; font-style: italic; }'
+    '.hljs-todo-url { color: #032f62; text-decoration: underline; }'
+    '.hljs-todo-x { color: #6a737d; font-weight: bold; }'
+    'details { margin-top: 1em; }'
+    'summary { cursor: pointer; }'
     '</style>'
 )
 
@@ -106,16 +120,24 @@ FOOTER_BANNER = (
 )
 
 
-def _page(title, body, md=False):
-    # md=True: show pages reference the bootstrap + vendored markdown-it
-    # (ADR-0008). Other pages (index, errors) skip them entirely.
-    script = ''
-    if md:
+def _page(title, body, scripts=None):
+    # scripts=None: plain page (index, errors). Lists of asset names:
+    # 'md' (show pages: markdown-it + highlight.js + bootstrap, ADR-0008/0009)
+    # or 'todotxt' (list page: highlight.js + bootstrap only, ADR-0010).
+    if scripts is None:
+        script = ''
+    elif scripts == 'md':
         script = ('<script src="/static/markdown-it-{}.min.js"></script>'
                   '<script src="/static/highlight-{}.min.js"></script>'
                   '<script src="/static/{}" defer></script>'.format(
                       MARKDOWN_IT_VERSION, HIGHLIGHT_VERSION,
                       BOOTSTRAP_FILE))
+    elif scripts == 'todotxt':
+        script = ('<script src="/static/highlight-{}.min.js"></script>'
+                  '<script src="/static/{}" defer></script>'.format(
+                      HIGHLIGHT_VERSION, BOOTSTRAP_FILE))
+    else:
+        raise AssertionError('unknown script set {!r}'.format(scripts))
     return ('<!DOCTYPE html>\n<html><head><meta charset="utf-8">'
             '<title>{}</title>'.format(_html_escape(title))
             + PAGE_STYLE
@@ -166,16 +188,44 @@ def _index_page():
             continue
         h = todo._hash_of_line(line)
         if h:
-            text = '<a href="/show/{}">{}</a>'.format(_html_escape(h),
-                                                      _html_escape(line))
+            text = '<a href="/show/{}">{}</a>'.format(
+                _html_escape(h), _todotxt_span(line))
         else:
             # Unhashed Line: plain text, no link (read-only UI cannot mint).
-            text = _html_escape(line)
+            text = _todotxt_span(line)
         rows.append('<tr><td>{}</td><td>{}</td></tr>'.format(idx, text))
     body = ('<h1>Open Issues</h1>'
             '<table><tr><th>Line</th><th>Issue</th></tr>'
             + ''.join(rows) + '</table>')
-    return _respond('200 OK', _page('Open Issues', body))
+    body += _done_section()
+    return _respond('200 OK', _page('Open Issues', body, scripts='todotxt'))
+
+
+def _done_section():
+    # done.txt listing under a collapsed <details> (ADR-0010). Same
+    # grammar as todo.txt; no links (closed issues are reachable by
+    # hash from the show page).
+    done_path = os.path.join(os.getcwd(), todo.DONE_FILE)
+    if not os.path.exists(done_path):
+        return ''
+    rows = []
+    for idx, line in enumerate(_read_text_lines(done_path), 1):
+        line = line.strip()
+        if not line:
+            continue
+        rows.append('<tr><td>{}</td><td>{}</td></tr>'.format(
+            idx, _todotxt_span(line)))
+    if not rows:
+        return ''
+    return ('<details><summary>Closed Issues (done.txt)</summary>'
+            '<table><tr><th>Line</th><th>Issue</th></tr>'
+            + ''.join(rows) + '</table></details>')
+
+
+def _todotxt_span(line):
+    # Marks the line for the client-side todo.txt grammar (ADR-0010);
+    # no-JS fallback is the escaped plain text.
+    return '<span class="todotxt">{}</span>'.format(_html_escape(line))
 
 
 class _ResolverArgs(object):
@@ -291,7 +341,7 @@ def _show_by_hash(h):
                                             _html_escape(att)))
             parts.append('</ul>')
     parts.append('<p><a href="/">back</a></p>')
-    return _respond('200 OK', _page(title, '\n'.join(parts), md=True))
+    return _respond('200 OK', _page(title, '\n'.join(parts), scripts='md'))
 
 
 def _serve_static(name):

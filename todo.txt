@@ -35,4 +35,3 @@ readme doc bug `Line numbers are stable for life. A number copied from any list 
 2026-11-08 html (no script) support from model for display - also see markdown request
 2026-11-09 text UI, see video https://youtu.be/3qspSSbDGZ4?si=nJMaSwNUEFseXul6 using c and printf with terminal (so likely not windows) as well as obvious curses/ TUI
 (A) 2026-11-09 web UI on mobile with ask question, tool-tip NOT visible, can not see recommendations or deeper details
-2026-11-10 web UI: syntax highlighting for code fences and todo.txt/done.txt (client-side) hash:0a7d7e68 +trackertool @feature

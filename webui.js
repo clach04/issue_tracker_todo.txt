@@ -14,6 +14,52 @@
 (function () {
   'use strict';
 
+  /* ADR-0010: custom todo.txt/done.txt grammar (part 2 of hash:0a7d7e68).
+   * Token set: priority (A)/(B)/(C) traffic-light, completion date, x
+   * completion mark (done.txt), hash: token (special color), generic
+   * key:value, +project, @context, bare URLs. Order matters: URL before
+   * key:value (https: would match), hash: before key:value.
+   */
+  function registerTodotxt(hljs) {
+    var URL = {className: 'todo-url', begin: /https?:\/\/[^\s)]+/};
+    var HASH = {className: 'todo-hash', begin: /\bhash:[0-9a-f]{8}\b/};
+    var DATE = {className: 'todo-date', begin: /\b\d{4}-\d{2}-\d{2}\b/};
+    var PROJECT = {className: 'todo-project', begin: /\B\+[a-z0-9_-]+/};
+    var CONTEXT = {className: 'todo-context', begin: /\B@[a-z0-9_-]+/};
+    var KEYVAL = {className: 'todo-keyval',
+                  begin: /\b[a-z][a-z0-9_-]*:[a-z0-9][^\s]*/i};
+    return {
+      name: 'todo.txt',
+      contains: [
+        {className: 'todo-x', begin: /^x\s/, relevance: 0},
+        {className: 'todo-pri-a', begin: /\(A\)/, relevance: 0},
+        {className: 'todo-pri-b', begin: /\(B\)/, relevance: 0},
+        {className: 'todo-pri-c', begin: /\(C\)/, relevance: 0},
+        URL,
+        HASH,
+        DATE,
+        PROJECT,
+        CONTEXT,
+        KEYVAL
+      ]
+    };
+  }
+
+  function renderTodotxt() {
+    if (!window.hljs) {
+      return; // fallback: server-sent escaped text stays
+    }
+    if (window.hljs.getLanguage('todotxt') === undefined) {
+      window.hljs.registerLanguage('todotxt', registerTodotxt);
+    }
+    var spans = document.querySelectorAll('span.todotxt');
+    for (var i = 0; i < spans.length; i++) {
+      var el = spans[i];
+      el.innerHTML = window.hljs.highlight(el.textContent,
+                                           {language: 'todotxt'}).value;
+    }
+  }
+
   function renderMarkdown() {
     var MarkdownIt = window.markdownit;
     if (!MarkdownIt) {
@@ -53,9 +99,14 @@
     }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', renderMarkdown);
-  } else {
+  function renderAll() {
+    renderTodotxt();
     renderMarkdown();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', renderAll);
+  } else {
+    renderAll();
   }
 }());
