@@ -21,3 +21,18 @@ readme doc bug `Line numbers are stable for life. A number copied from any list 
 2026-11-08 todo.py add -d description from stdin hash:fef2d86f +trackertool @feature
 2026-11-08 todo.py comment stdin: consider text-mode stdin handling hash:cbe3727f +trackertool @techdebt
 2026-11-09 Web UI: render issue.md and comments as markdown, not escaped pre hash:e072da96 +trackertool @feature
+2026-11-08 Openrouter per session, not stored on disk and provided by UI? Idea that can create a token just for one session with both expiry date and budget
+2026-11-08 many plans / md files in root. Cleanup, likely move to plans done?
+2026-11-08 py27 htmllib already present, explain issue rather than fixing
+2026-11-08 todo.py skill? Vendor?
+2026-11-08 sub agents with different models and provider/max tokens (api key?)
+2026-11-08  mobile ui clean up. E.g. questions should remive /hide/acroll regular entry field
+2026-11-08 commit co authors
+2026-11-08 grill skill that asks/generates examples
+2026-11-08 review too terse agents.md directive
+2026-11-08 review agents.md, why is python almost always called incorrectly? Too long a directives file? Ascii continues to work :-)
+2026-11-08 port number 0, open regular socket then close. Accept potential for race condition as low risk, but not zero
+2026-11-08 tool to dump stats of providers. Hard to compare today, include token size supported and quantity. Html table, commandline seperate tool or even web ui feature? Markdown with spacing (would allow command line)
+2026-11-08 html (no script) support from model for display - also see markdown request
+2026-11-09 text UI, see video https://youtu.be/3qspSSbDGZ4?si=nJMaSwNUEFseXul6 using c and printf with terminal (so likely not windows) as well as obvious curses/ TUI
+(A) 2026-11-09 web UI on mobile with ask question, tool-tip NOT visible, can not see recommendations or deeper details
