@@ -317,17 +317,26 @@ class TestLocalIssueTracker(unittest.TestCase):
 
     def _fake_stdin(self, data):
         # Replace sys.stdin with a fake piped stdin (isatty False).
-        # data is bytes; None means an empty pipe.
+        # data is bytes; None means an empty pipe. When py2_style=True the
+        # fake mimics py2's file stdin (read() on the object itself, no
+        # .buffer) so the read_stdin_bytes() shim is exercised on both
+        # interpreters (hash:d2b6b1cf).
         import io
         buf = io.BytesIO(data if data is not None else b'')
 
         class _FakeStdin(object):
-            def __init__(self, buffer):
-                self.buffer = buffer
+            def __init__(self, buffer, py2_style):
+                self._buffer = buffer
+                self._py2_style = py2_style
+                if not py2_style:
+                    self.buffer = buffer
+            def read(self):
+                assert self._py2_style, "read() only on py2-style fake stdin"
+                return self._buffer.read()
             def isatty(self):
                 return False
         self._old_stdin = sys.stdin
-        sys.stdin = _FakeStdin(buf)
+        sys.stdin = _FakeStdin(buf, py2_style=(sys.version_info[0] < 3))
         return buf
 
     def _restore_stdin(self):
@@ -346,6 +355,46 @@ class TestLocalIssueTracker(unittest.TestCase):
         # Raw bytes written as-is: no added newline, no normalization.
         body = self._read(os.path.join(comments_dir, comment_files[0]))
         self.assertEqual(body, 'piped body line one\nline two\n')
+
+    def test_comment_stdin_binary_bytes_py2_style(self):
+        # hash:d2b6b1cf: py2 stdin is a file object (read() returns raw
+        # bytes, no .buffer attribute). The fake py2-style stdin plus a
+        # non-ascii/high-byte body prove read_stdin_bytes() is
+        # byte-faithful on BOTH interpreters - the pre-fix code crashed
+        # with AttributeError on py2 here.
+        issue_hash = self._add("Stdin py2 issue")
+        raw = b'\x00\x01\xfe\xff binary \xc3\xa9 tail\n'
+        self._fake_stdin(raw)
+        try:
+            todo.cmd_comment(_ns(identifier="hash:"+issue_hash, text="-"))
+        finally:
+            self._restore_stdin()
+        comments_dir = os.path.join(todo.ISSUES_DIR, issue_hash, 'comments')
+        comment_files = os.listdir(comments_dir)
+        self.assertEqual(len(comment_files), 1)
+        with open(os.path.join(comments_dir, comment_files[0]), 'rb') as f:
+            self.assertEqual(f.read(), raw)
+
+    def test_comment_extra_text_arguments_fail_loudly(self):
+        # hash:d2b6b1cf case 2: `cat f` word-split into several tokens
+        # used to die in argparse with a bare usage error. With
+        # nargs='+' cmd_comment now rejects extras with a hint naming
+        # the deferred join idea (hash:6e4084b4).
+        issue_hash = self._add("Extra args issue")
+        stderr = _capture_stderr()
+        old_stderr = sys.stderr
+        sys.stderr = stderr
+        try:
+            with self.assertRaises(AssertionError) as excinfo:
+                todo.cmd_comment(_ns(identifier="hash:"+issue_hash,
+                                     text=["test", "line2"]))
+        finally:
+            sys.stderr = old_stderr
+        self.assertIn("one text argument", str(excinfo.exception))
+        self.assertIn("hash:6e4084b4", str(excinfo.exception))
+        # No comment file created on failure.
+        comments_dir = os.path.join(todo.ISSUES_DIR, issue_hash, 'comments')
+        self.assertFalse(os.path.exists(comments_dir))
 
     def test_comment_dash_marker_conflict_with_text_arg_fails(self):
         issue_hash = self._add("Stdin conflict issue")

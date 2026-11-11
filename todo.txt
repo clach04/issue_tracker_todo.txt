@@ -22,3 +22,6 @@ add support to sync with GitHub issues @feature hash:cfc7b903
 2026-11-10 web UI: copy-to-clipboard on mobile/touch devices hash:0649b64e +trackertool @feature
 2026-11-10 make hash:<hex> the visually primary identifier in add/list output hash:7e8a04ce +trackertool @feature
 2026-11-11 todo.py: --dir/--file accepted before the subcommand too (global options position) hash:40423e61 +trackertool @feature
+2026-11-11 todo.py add needs to show copy/pastable `hash:XYZ`, it only shows XYZ hash:1a0012fe
+2026-11-11 Cross-issue references: explore LINK:/DUPE: key-value convention for todo.txt, issue.md, comments hash:470dc24a +trackertool @feature
+2026-11-11 todo.py comment: consider joining multiple shell word-split arguments into one comment text hash:6e4084b4 +trackertool @feature

@@ -226,7 +226,9 @@ curl https://example.com/plot | todo.py comment hash:XXXXXXXX
 
 - The body is read as **raw bytes** and written as-is: no encoding
   validation, no newline normalization, no added header. The comment
-  file is `.issues/<hash>/comments/<timestamp>.md` as usual.
+  file is `.issues/<hash>/comments/<timestamp>.md` as usual. Works on
+  Python 2 and 3 alike (py2 reads the `file` stdin directly, py3 reads
+  `sys.stdin.buffer`).
 - **Empty stdin** is an error (exit 1, no comment file created).
 - **Any text argument plus piped stdin** is a loud error (exit 1, no
   comment file created): give one or the other. A text argument with
@@ -236,6 +238,10 @@ curl https://example.com/plot | todo.py comment hash:XXXXXXXX
   shell with no stdin redirect, or pass the body via stdin with `-`.
 - A literal `-` comment body is **not expressible** (accepted
   limitation; use a longer wording or edit the file directly).
+- `comment` takes **exactly one** text argument. Shell word-splitting
+  (e.g. ``todo.py comment <id> `cat f` `` with a multi-word file) is a
+  loud error naming the problem, not an argparse usage dump; quote the
+  text or pipe it via `-`.
 - `comment` is the only command with stdin support.
 
 ## Store location (`--dir` / `--file`, ADR-0017)

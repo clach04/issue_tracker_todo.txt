@@ -14,6 +14,24 @@ import datetime
 import argparse
 import subprocess
 import glob
+import io
+
+IS_PY3 = sys.version_info >= (3,)
+
+def read_stdin_bytes():
+    # Byte-faithful stdin read (comment dash-marker plan; same idiom as
+    # ptcipher.py): py3 exposes raw bytes via sys.stdin.buffer; py2's
+    # sys.stdin is a file object whose read() already returns raw bytes.
+    # Asserted, not assumed - fails loudly if neither shape appears.
+    if IS_PY3:
+        assert hasattr(sys.stdin, 'buffer'), (
+            "expected py3 stdin with .buffer, got {}".format(type(sys.stdin)))
+        return sys.stdin.buffer.read()
+    assert hasattr(sys.stdin, 'read'), (
+        "expected py2 file-like stdin, got {}".format(type(sys.stdin)))
+    return sys.stdin.read()
+
+DASH_MARKER = '-'
 
 # Store location (ADR-0017): the store is a bundle - todo.txt + done.txt
 # + .issues/ all live in ONE directory. Env vars are read ONCE at import
@@ -590,6 +608,25 @@ DASH_MARKER = '-'
 
 def cmd_comment(args):
     ensure_environment()
+    # nargs='+' means shell word-splitting (e.g. `cat f` unquoted) shows
+    # up here as a list instead of an argparse usage error (hash:d2b6b1cf
+    # case 2). Fail loudly with a hint rather than silently joining; see
+    # hash:6e4084b4 for the deferred join idea. Programmatic callers may
+    # pass a plain string (py2 unicode / py3 str); anything else fails
+    # fast with actual vs expected.
+    if isinstance(args.text, type(u'')):
+        args.text = [args.text]
+    if not isinstance(args.text, list):
+        raise AssertionError("expected comment text as text or list of text, "
+                             "got {} (type {})".format(args.text, type(args.text).__name__))
+    if len(args.text) < 1:
+        raise AssertionError("expected 1+ comment text argument(s), got 0")
+    if len(args.text) > 1:
+        raise AssertionError("comment takes one text argument; got {} "
+                             "arguments (shell word-splitting?). Quote the text "
+                             "or pipe it via '-'; joining extras is deferred "
+                             "(hash:6e4084b4)".format(len(args.text)))
+    args.text = args.text[0]
     full_hash = resolve_identifier(args, args.identifier)
 
     # Dash Marker (docs/plans/comment-stdin.md): '-' as the text arg
@@ -608,7 +645,7 @@ def cmd_comment(args):
                   "<id> -")
         # Read bytes, write binary: byte fidelity, no text-mode
         # translation, no encoding validation. Empty stdin is an error.
-        data = sys.stdin.buffer.read()
+        data = read_stdin_bytes()
         if not data:
             _fail("no stdin content (Dash Marker '-' expects a piped body)")
         body = data
@@ -899,7 +936,7 @@ def main():
     # comment
     parser_comment = subparsers.add_parser('comment', parents=[common], help='Add a timestamped comment to an issue')
     parser_comment.add_argument('identifier', help='Issue identifier: hash:<hex>, line number, hash prefix, or title substring')
-    parser_comment.add_argument('text', help="Comment text, or '-' to read the comment body from stdin")
+    parser_comment.add_argument('text', nargs='+', help="Comment text, or '-' to read the comment body from stdin")
 
     # close
     parser_close = subparsers.add_parser('close', parents=[common], help='Close an issue and archive it to done.txt')

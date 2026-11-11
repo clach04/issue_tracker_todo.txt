@@ -23,3 +23,4 @@ x 2026-11-10 2026-11-10 web UI: show page - always-visible copy button (ADR-0011
 x 2026-11-10 (A) 2026-11-08 `todo.py help` should behave as if `todo.py --help` had been issued hash:eb1deb21
 x 2026-11-10 (A) readme doc bug `Line numbers are stable for life. A number copied from any list output addresses the same Index line forever; a later add never renumbers an existing issue.` is not accurate. Closing moves to done.txt ergo NOT "stable for life", external tools nor edits also break this promise in the readme (this line was added by hand as a text file edit) @doc @bug hash:b8e9d849
 x 2026-11-11 (A) options to specify the todo.txt file name (and/or directory). env and commandline flags? hash:9efddab9 @feature
+x 2026-11-11 2026-11-11 todo.py comment broken hash:d2b6b1cf
