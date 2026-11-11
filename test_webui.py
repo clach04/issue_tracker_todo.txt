@@ -219,6 +219,9 @@ class TestWebUI(unittest.TestCase):
         text = body.decode('utf-8')
         self.assertIn('data-copy="hash:{}"'.format(h), text)
         self.assertIn('class="copy-btn"', text)
+        # The copy button is a SIBLING of the row link, not a child
+        # (clicking it must not navigate to the show page).
+        self.assertIn('</a><span class="copy-btn"', text)
         # Unhashed lines have no copy button.
         with open(todo.TODO_FILE, 'a') as f:
             f.write('\nhand-written line without a hash token\n')

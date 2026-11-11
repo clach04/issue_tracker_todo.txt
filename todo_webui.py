@@ -196,8 +196,8 @@ def _index_page():
             continue
         h = todo._hash_of_line(line)
         if h:
-            text = '<a href="/show/{}">{}</a>'.format(
-                _html_escape(h), _todotxt_span(line, h))
+            text = '<a href="/show/{}">{}</a><span class="copy-btn" data-copy="hash:{}">&#x29C9;</span>'.format(
+                _html_escape(h), _todotxt_span(line), _html_escape(h))
         else:
             # Unhashed Line: plain text, no link (read-only UI cannot mint).
             text = _todotxt_span(line)
@@ -221,8 +221,15 @@ def _done_section():
         line = line.strip()
         if not line:
             continue
-        rows.append('<tr><td>{}</td><td>{}</td></tr>'.format(
-            idx, _todotxt_span(line, todo._hash_of_line(line))))
+        h = todo._hash_of_line(line)
+        cell = _todotxt_span(line)
+        if h:
+            # Closed issues are reachable by hash; copy button sits
+            # outside the row cell (no link here, but keep siblings
+            # consistent with the todo.txt table).
+            cell += '<span class="copy-btn" data-copy="hash:{}">&#x29C9;</span>'.format(
+                _html_escape(h))
+        rows.append('<tr><td>{}</td><td>{}</td></tr>'.format(idx, cell))
     if not rows:
         return ''
     return ('<details><summary>Closed Issues (done.txt)</summary>'
@@ -233,8 +240,9 @@ def _done_section():
 def _todotxt_span(line, h=None):
     # Marks the line for the client-side todo.txt grammar (ADR-0010);
     # no-JS fallback is the escaped plain text. The copy button is a
-    # no-JS-invisible span (hover-reveal, ADR-0011); data-copy holds the
-    # hash: token the button copies.
+    # sibling span (ADR-0011), NOT inside the row link - clicking it
+    # must not navigate to the show page. data-copy holds the hash:
+    # token the button copies.
     html = '<span class="todotxt">{}</span>'.format(_html_escape(line))
     if h:
         html += '<span class="copy-btn" data-copy="hash:{}">&#x29C9;</span>'.format(

@@ -144,6 +144,10 @@
     for (var i = 0; i < buttons.length; i++) {
       var btn = buttons[i];
       btn.addEventListener('click', function (event) {
+        // ADR-0011: the button is a sibling of the row link, not a child,
+        // but stop propagation anyway so a click never navigates.
+        event.stopPropagation();
+        event.preventDefault();
         var self = event.currentTarget;
         var text = self.getAttribute('data-copy');
         if (!text) {
