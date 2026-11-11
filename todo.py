@@ -15,9 +15,64 @@ import argparse
 import subprocess
 import glob
 
-TODO_FILE = 'todo.txt'
-DONE_FILE = 'done.txt'
-ISSUES_DIR = '.issues'
+# Store location (ADR-0017): the store is a bundle - todo.txt + done.txt
+# + .issues/ all live in ONE directory. Env vars are read ONCE at import
+# time into the defaults; CLI flags override them via apply_store(). With
+# no env vars set the constants stay relative (cwd), so existing tests
+# and the web UI's cwd-based path joins keep working unchanged.
+DEFAULT_TODO_FILE = 'todo.txt'
+DEFAULT_DONE_FILE = 'done.txt'
+DEFAULT_ISSUES_DIR = '.issues'
+
+TODO_FILE = DEFAULT_TODO_FILE
+DONE_FILE = DEFAULT_DONE_FILE
+ISSUES_DIR = DEFAULT_ISSUES_DIR
+
+
+def apply_store(dir_value=None, file_value=None):
+    """Resolve the store bundle (ADR-0017) and mutate the module constants.
+
+    Precedence: CLI flags (dir_value / file_value) > env vars
+    (TODO_TRACKER_DIR / TODO_FILE) > defaults. A --file FULL PATH implies
+    its parent directory for the whole bundle (done.txt and .issues/ move
+    there); a bare file name only changes the todo index name. --dir
+    relocates the bundle directory with file names fixed. Relative paths
+    resolve against cwd at call time. No directory is created here;
+    ensure_environment() auto-creates them (mkdir -p semantics).
+    """
+    dir_val = dir_value if dir_value is not None else os.environ.get('TODO_TRACKER_DIR')
+    file_val = file_value if file_value is not None else os.environ.get('TODO_FILE')
+
+    todo_name = DEFAULT_TODO_FILE
+    if file_val is not None:
+        parent = os.path.dirname(file_val)
+        if parent:
+            # Full path implies its own parent dir for the whole bundle;
+            # --file wins over --dir in that case (ADR-0017).
+            dir_val = parent
+        todo_name = os.path.basename(file_val)
+    if dir_val is not None:
+        # Explicit dir (or --file parent): absolutize once so the store
+        # location is stable regardless of later cwd changes.
+        dir_val = os.path.abspath(dir_val)
+    else:
+        # No explicit dir: keep the constants RELATIVE (cwd-relative) so
+        # they follow the process cwd, as they always have.
+        dir_val = None
+
+    global TODO_FILE, DONE_FILE, ISSUES_DIR
+    if dir_val is None:
+        TODO_FILE = todo_name
+        DONE_FILE = DEFAULT_DONE_FILE
+        ISSUES_DIR = DEFAULT_ISSUES_DIR
+    else:
+        TODO_FILE = os.path.join(dir_val, todo_name)
+        DONE_FILE = os.path.join(dir_val, DEFAULT_DONE_FILE)
+        ISSUES_DIR = os.path.join(dir_val, DEFAULT_ISSUES_DIR)
+
+
+if os.environ.get('TODO_TRACKER_DIR') or os.environ.get('TODO_FILE'):
+    apply_store()
 
 HEX_RE = re.compile(r'^[0-9a-fA-F]+$')
 
@@ -46,6 +101,9 @@ PRIORITY_BOUND_RE = re.compile(r'^([A-Z])([+-])$')
 PRIORITY_FILTER_SHAPES = "C, A-C, C+, C- (A is highest)"
 
 def ensure_environment():
+    # ADR-0017: the store dir may not exist yet (e.g. --dir ~/notes/empty);
+    # auto-create it (mkdir -p semantics) - a missing dir is a valid empty
+    # tracker. os.makedirs creates parents too.
     if not os.path.exists(ISSUES_DIR):
         os.makedirs(ISSUES_DIR)
     for filepath in [TODO_FILE, DONE_FILE]:
@@ -804,6 +862,15 @@ def main():
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument('--verbose', action='store_true', default=False,
                         help='Trace-level output for major steps')
+    # ADR-0017: store location. Flags override env vars (TODO_TRACKER_DIR /
+    # TODO_FILE), which override the defaults. See apply_store().
+    common.add_argument('--dir', default=None, metavar='DIR',
+                        help='Store directory (todo.txt, done.txt, .issues/ '
+                             'live here); env TODO_TRACKER_DIR overrides')
+    common.add_argument('--file', default=None, metavar='FILE',
+                        help='Todo index file name or full path; a full path '
+                             'implies its parent dir for the whole bundle; '
+                             'env TODO_FILE overrides')
 
     # add
     parser_add = subparsers.add_parser('add', parents=[common], help='Create a new issue')
@@ -869,6 +936,10 @@ def main():
         sys.exit(1)
 
     args = parser.parse_args()
+
+    # ADR-0017: apply store location (flags > env vars > defaults) before
+    # any command touches the store.
+    apply_store(dir_value=args.dir, file_value=args.file)
 
     if args.command == 'add':
         cmd_add(args)

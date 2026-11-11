@@ -3,7 +3,6 @@
 (C) 2026-11-07 no backfill path for done.txt (hash --closed deferred) hash:b6e88862 +trackertool @feature
 (C) 2026-11-06 Evaluate detached-worktree git strategy hash:d252c7a2 +trackertool @idea
 (C) 2026-11-06 Support EDITOR values containing arguments hash:506ef7da +trackertool @techdebt
-(A) options to specify the todo.txt file name (and/or directory). env and commandline flags? hash:9efddab9 @feature
 option to ensure edit can be explictly disabled, i.e. not spawning editors under batch hash:4e083e78
 document common tags, `@techdebt` something new for docs hash:ae89067d
 review all ADRs for future todo ideas not captured in task list hash:448315fe
@@ -22,3 +21,4 @@ add support to sync with GitHub issues @feature hash:cfc7b903
 2026-11-10 web UI: expand priority token range with distinct colors hash:01ba52a8 +trackertool @feature
 2026-11-10 web UI: copy-to-clipboard on mobile/touch devices hash:0649b64e +trackertool @feature
 2026-11-10 make hash:<hex> the visually primary identifier in add/list output hash:7e8a04ce +trackertool @feature
+2026-11-11 todo.py: --dir/--file accepted before the subcommand too (global options position) hash:40423e61 +trackertool @feature

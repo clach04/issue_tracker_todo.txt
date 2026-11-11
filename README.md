@@ -238,6 +238,51 @@ curl https://example.com/plot | todo.py comment hash:XXXXXXXX
   limitation; use a longer wording or edit the file directly).
 - `comment` is the only command with stdin support.
 
+## Store location (`--dir` / `--file`, ADR-0017)
+
+The store is a **bundle**: `todo.txt`, `done.txt`, and `.issues/` live
+in one directory and are relocated as a unit. Two knobs, available on
+every `todo.py` subcommand, on `todo_webui.py`, and on `md2todo.py`:
+
+```text
+--dir DIR     relocate the bundle directory; file names stay fixed.
+--file FILE   point at the todo index by name or full path.
+```
+
+A full path in `--file` implies its **parent directory** for the whole
+bundle: `--file /home/me/notes/issues.txt` puts `done.txt` at
+`/home/me/notes/done.txt` and `.issues/` at `/home/me/notes/.issues/`.
+A bare file name only changes the name inside the resolved directory
+(`--file issues.txt --dir notes`).
+
+Precedence: **CLI flags > env vars > defaults**. The env vars are
+`TODO_TRACKER_DIR` (same as `--dir`) and `TODO_FILE` (same as
+`--file`). Relative values resolve against the process cwd; absolute
+paths are allowed, so a store may live outside any repo.
+
+```bash
+python3 todo.py add --dir ~/notes 'issue in another store'
+python3 todo.py list --file ~/notes/issues.txt
+TODO_TRACKER_DIR=~/notes python3 todo_webui.py --port 8001
+python3 md2todo.py notes.md --dir ~/notes
+```
+
+**Positional note:** the `--dir`/`--file` flags are parsed per
+subcommand, so they must come **after** the subcommand
+(`todo.py list --file X`). The global-option position
+(`todo.py --file X list`) is not accepted yet — tracked as
+`hash:40423e61`. Until then, use the env var form, which works
+anywhere:
+
+```bash
+TODO_FILE=tmp/todo.txt ./todo.py list
+```
+
+A missing store directory is auto-created (mkdir -p semantics): a
+non-existent dir is a valid empty tracker. The default store is
+`todo.txt` + `done.txt` + `.issues/` in the current directory, exactly
+as before.
+
 ## Importing a GFM task list (`md2todo.py`)
 
 `md2todo.py` converts a GitHub-Flavored Markdown checklist into Issues
@@ -249,6 +294,12 @@ md2todo.py path/to/notes.md              # import
 md2todo.py path/to/notes.md --dry-run    # print the plan, write nothing
 md2todo.py notes.md -p B --project backend --context bug
 ```
+
+The positional argument (the markdown input file) is named `input`
+(ADR-0017): it was renamed from `file` so `--file` can point at the
+todo index unambiguously. Scripts that referenced `--file`-style flags
+of the old parser are unaffected; the positional was always given as a
+bare path.
 
 **v1 imports top-level items only.** Nested items are not Issues: they
 are stored verbatim (original lines, indentation intact) in the parent's

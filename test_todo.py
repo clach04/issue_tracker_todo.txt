@@ -1798,5 +1798,218 @@ class TestGfmImport(unittest.TestCase):
                          "open issues append in source order (ADR-0004)")
 
 
+# ----------------------------------------------------------------------
+# ADR-0017: configurable store location (--dir / --file, env vars)
+# ----------------------------------------------------------------------
+
+class TestStoreLocation(unittest.TestCase):
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.old_cwd = os.getcwd()
+        os.chdir(self.test_dir)
+        self._old_out, self._old_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = _capture_stdout(), _capture_stderr()
+        # Save the store constants; apply_store() mutates them globally.
+        self._old = (todo.TODO_FILE, todo.DONE_FILE, todo.ISSUES_DIR)
+        self._old_env = (os.environ.get('TODO_TRACKER_DIR'),
+                         os.environ.get('TODO_FILE'))
+        os.environ.pop('TODO_TRACKER_DIR', None)
+        os.environ.pop('TODO_FILE', None)
+
+    def tearDown(self):
+        todo.TODO_FILE, todo.DONE_FILE, todo.ISSUES_DIR = self._old
+        for name, value in (('TODO_TRACKER_DIR', self._old_env[0]),
+                            ('TODO_FILE', self._old_env[1])):
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+        sys.stdout, sys.stderr = self._old_out, self._old_err
+        os.chdir(self.old_cwd)
+        shutil.rmtree(self.test_dir)
+
+    def _run(self, argv):
+        sys.argv = ['todo.py'] + argv
+        old_out, old_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = _capture_stdout(), _capture_stderr()
+        try:
+            try:
+                todo.main()
+            except SystemExit as e:
+                code = e.code
+            else:
+                code = None
+            out, err = sys.stdout.getvalue(), sys.stderr.getvalue()
+        finally:
+            sys.stdout, sys.stderr = old_out, old_err
+        # Normalize success (None) to 0 for assertions.
+        return (0 if code is None else code), out, err
+
+    def _read(self, path):
+        with io.open(path, 'r', encoding='utf-8') as f:
+            return f.read()
+
+    def test_apply_store_no_args_resets_to_relative_defaults(self):
+        # Sanity: no flags/env -> constants stay relative, following cwd.
+        todo.apply_store()
+        self.assertEqual(todo.TODO_FILE, 'todo.txt')
+        self.assertEqual(todo.DONE_FILE, 'done.txt')
+        self.assertEqual(todo.ISSUES_DIR, '.issues')
+
+    def test_dir_flag_relocates_bundle(self):
+        store = os.path.join(self.test_dir, 'store')
+        code, out, err = self._run(['add', '--dir', store, 'relocated issue'])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.exists(os.path.join(store, 'todo.txt')))
+        self.assertTrue(os.path.exists(os.path.join(store, 'done.txt')))
+        self.assertTrue(os.path.isdir(os.path.join(store, '.issues')))
+        # The absolute cwd store must NOT be polluted.
+        self.assertFalse(os.path.exists(os.path.join(self.test_dir, 'todo.txt')))
+        # list works against the same store.
+        code, out, err = self._run(['list', '--dir', store])
+        self.assertEqual(code, 0, err)
+        self.assertIn('relocated issue', out)
+
+    def test_file_full_path_implies_parent_dir_for_bundle(self):
+        store = os.path.join(self.test_dir, 'store')
+        code, out, err = self._run(
+            ['add', '--file', os.path.join(store, 'issues.txt'), 'full path issue'])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.exists(os.path.join(store, 'issues.txt')))
+        self.assertTrue(os.path.exists(os.path.join(store, 'done.txt')))
+        self.assertTrue(os.path.isdir(os.path.join(store, '.issues')))
+        code, out, err = self._run(
+            ['list', '--file', os.path.join(store, 'issues.txt')])
+        self.assertEqual(code, 0, err)
+        self.assertIn('full path issue', out)
+
+    def test_file_bare_name_plus_dir_combo(self):
+        store = os.path.join(self.test_dir, 'store')
+        code, out, err = self._run(
+            ['add', '--file', 'issues.txt', '--dir', store, 'bare name issue'])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.exists(os.path.join(store, 'issues.txt')))
+        self.assertTrue(os.path.exists(os.path.join(store, 'done.txt')))
+        self.assertTrue(os.path.isdir(os.path.join(store, '.issues')))
+        self.assertFalse(os.path.exists(os.path.join(store, 'todo.txt')))
+
+    def test_file_wins_over_dir_when_full_path(self):
+        store = os.path.join(self.test_dir, 'store')
+        other = os.path.join(self.test_dir, 'other')
+        code, out, err = self._run(
+            ['add', '--file', os.path.join(store, 'issues.txt'),
+             '--dir', other, 'precedence issue'])
+        self.assertEqual(code, 0, err)
+        # --file is the most specific: the bundle lands in its parent dir.
+        self.assertTrue(os.path.exists(os.path.join(store, 'issues.txt')))
+        self.assertTrue(os.path.isdir(os.path.join(store, '.issues')))
+        self.assertFalse(os.path.exists(os.path.join(other, 'todo.txt')))
+        self.assertFalse(os.path.exists(os.path.join(other, '.issues')))
+
+    def test_env_vars_override_defaults(self):
+        store = os.path.join(self.test_dir, 'store')
+        os.environ['TODO_TRACKER_DIR'] = store
+        code, out, err = self._run(['add', 'env dir issue'])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.exists(os.path.join(store, 'todo.txt')))
+        self.assertFalse(os.path.exists(os.path.join(self.test_dir, 'todo.txt')))
+
+        os.environ.pop('TODO_TRACKER_DIR')
+        store3 = os.path.join(self.test_dir, 'store3')
+        os.environ['TODO_FILE'] = os.path.join(store3, 'idx.txt')
+        code, out, err = self._run(['add', 'env file issue'])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.exists(os.path.join(store3, 'idx.txt')))
+        self.assertTrue(os.path.isdir(os.path.join(store3, '.issues')))
+
+    def test_flags_override_env_vars(self):
+        store = os.path.join(self.test_dir, 'store')
+        os.environ['TODO_TRACKER_DIR'] = os.path.join(self.test_dir, 'envstore')
+        code, out, err = self._run(['add', '--dir', store, 'flag wins issue'])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.exists(os.path.join(store, 'todo.txt')))
+        self.assertFalse(os.path.exists(os.path.join(self.test_dir, 'envstore')))
+
+    def test_missing_dir_auto_created(self):
+        store = os.path.join(self.test_dir, 'nested', 'deep', 'store')
+        code, out, err = self._run(['add', '--dir', store, 'deep issue'])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.exists(os.path.join(store, 'todo.txt')),
+                        "auto-create must mkdir -p the whole store path")
+
+    def test_close_moves_line_to_done_in_relocated_bundle(self):
+        store = os.path.join(self.test_dir, 'store')
+        code, out, err = self._run(['add', '--dir', store, 'close me'])
+        self.assertEqual(code, 0, err)
+        code, out, err = self._run(['list', '--dir', store])
+        self.assertEqual(code, 0, err)
+        line = [l for l in out.splitlines() if 'close me' in l][0]
+        n = int(line.split(':')[0].strip())
+        code, out, err = self._run(['close', '--dir', store, str(n)])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.exists(os.path.join(store, 'todo.txt')))
+        self.assertIn('close me', self._read(os.path.join(store, 'done.txt')))
+        self.assertNotIn('close me', self._read(os.path.join(store, 'todo.txt')))
+
+    def test_messages_use_configured_file_name(self):
+        store = os.path.join(self.test_dir, 'store')
+        code, out, err = self._run(
+            ['add', '--file', os.path.join(store, 'issues.txt'), 'named issue'])
+        self.assertEqual(code, 0, err)
+        # An in-range line WITHOUT a hash token makes the resolver name the
+        # configured file; the message must not say 'todo.txt'.
+        with io.open(os.path.join(store, 'issues.txt'), 'a') as f:
+            f.write('\n')
+        code, out, err = self._run(
+            ['show', '--file', os.path.join(store, 'issues.txt'), '2'])
+        self.assertEqual(code, 1, err)
+        self.assertIn('issues.txt', err,
+                      "error message must use the configured file name")
+        self.assertNotIn('todo.txt', err,
+                         "error message must not hardcode the default name")
+
+    def test_show_and_comment_work_in_relocated_bundle(self):
+        store = os.path.join(self.test_dir, 'store')
+        code, out, err = self._run(['add', '--dir', store, 'describe me',
+                                    '-d', 'body text'])
+        self.assertEqual(code, 0, err)
+        code, out, err = self._run(['show', '--dir', store, 'describe me'])
+        self.assertEqual(code, 0, err)
+        self.assertIn('body text', out)
+        code, out, err = self._run(['comment', '--dir', store,
+                                    'describe me', 'a note'])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.isdir(os.path.join(store, '.issues')))
+
+    def test_md2todo_imports_into_relocated_bundle(self):
+        store = os.path.join(self.test_dir, 'store')
+        src = os.path.join(self.test_dir, 'in.md')
+        with io.open(src, 'w', encoding='utf-8') as f:
+            f.write('- [ ] imported issue\n')
+        self._run_md2todo([src, '--dir', store])
+        self.assertTrue(os.path.exists(os.path.join(store, 'todo.txt')))
+        self.assertIn('imported issue', self._read(os.path.join(store, 'todo.txt')))
+        self.assertTrue(os.path.isdir(os.path.join(store, '.issues')))
+
+    def _run_md2todo(self, argv):
+        old_out, old_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = _capture_stdout(), _capture_stderr()
+        try:
+            try:
+                md2todo.main(argv)
+            except SystemExit as e:
+                code = e.code
+            else:
+                code = None
+            err = sys.stderr.getvalue()
+            out = sys.stdout.getvalue()
+        finally:
+            sys.stdout, sys.stderr = old_out, old_err
+        code = 0 if code is None else code
+        self.assertEqual(code, 0, err)
+        return out, err
+
+
 if __name__ == '__main__':
     unittest.main()

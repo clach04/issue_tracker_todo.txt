@@ -476,7 +476,16 @@ def build_parser():
     parser = argparse.ArgumentParser(
         prog='md2todo.py',
         description='Import a GFM task list into the tracker (ADR-0006)')
-    parser.add_argument('file', help='GFM markdown file with a task list (exactly one)')
+    parser.add_argument('input', help='GFM markdown file with a task list (exactly one)')
+    # ADR-0017: store location. Flags override env vars (TODO_TRACKER_DIR /
+    # TODO_FILE), which override the defaults. See todo.apply_store().
+    parser.add_argument('--dir', default=None, metavar='DIR',
+                        help='Store directory (todo.txt, done.txt, .issues/ '
+                             'live here); env TODO_TRACKER_DIR overrides')
+    parser.add_argument('--file', default=None, metavar='FILE',
+                        help='Todo index file name or full path; a full path '
+                             'implies its parent dir for the whole bundle; '
+                             'env TODO_FILE overrides')
     parser.add_argument('--dry-run', action='store_true', default=False,
                         help='Print the plan and the paths; write nothing')
     parser.add_argument('--flatten', action='store_true', default=False,
@@ -502,19 +511,22 @@ def _report_warnings(warnings, path):
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    # ADR-0017: resolve store location (flags > env vars > defaults)
+    # before touching the store.
+    todo.apply_store(dir_value=args.dir, file_value=args.file)
     if args.flatten:
         # The name is locked by ADR-0006 so a later version cannot be
         # forced to pick a different flag.
         todo._fail("--flatten is not implemented yet (v1 imports top-level items only)")
-    if not os.path.exists(args.file):
-        todo._fail("file not found: {}".format(args.file))
-    lines = _read_lines(args.file)
-    todo._trace(args, "md2todo: read {} line(s) from {}".format(len(lines), args.file))
+    if not os.path.exists(args.input):
+        todo._fail("file not found: {}".format(args.input))
+    lines = _read_lines(args.input)
+    todo._trace(args, "md2todo: read {} line(s) from {}".format(len(lines), args.input))
     plan, warnings = build_plan(lines)
     if not plan:
-        _report_warnings(warnings, args.file)
-        todo._fail("no checklist items found in {}".format(args.file))
-    _report_warnings(warnings, args.file)
+        _report_warnings(warnings, args.input)
+        todo._fail("no checklist items found in {}".format(args.input))
+    _report_warnings(warnings, args.input)
     todo._trace(args, "md2todo: {} issue(s) planned, dry_run={}".format(len(plan), args.dry_run))
     if not args.dry_run:
         todo.ensure_environment()
