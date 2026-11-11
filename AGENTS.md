@@ -55,12 +55,9 @@ convention: `docs/plans/README.md`.
 - Tag issues with `--project` and `--context` where applicable.
 - Resolve issues by identifier per docs/adr/0002; prefer the explicit
   `hash:<hex>` form in scripts and docs.
-- Close what you finish. When a commit resolves a tracked issue,
-  close it in the same session: `todo.py close hash:<hex>` (explicit
-  hash form per ADR-0002). An issue is only "done" when the fix is
-  committed AND the line is out of todo.txt. Check `todo.py list`
-  before ending a session; if you spawned a new issue (e.g. a deferred
-  TODO), file it and close it only if the work itself is complete.
+- Close what you finish. Fixing a tracked issue is not enough: the
+  issue must be closed too (`todo.py close hash:<hex>`), or it
+  lingers open in todo.txt forever.
 
 Respond in English unless the user explicitly requests otherwise
 
