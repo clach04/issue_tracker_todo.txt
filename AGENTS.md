@@ -58,6 +58,13 @@ convention: `docs/plans/README.md`.
 - Close what you finish. Fixing a tracked issue is not enough: the
   issue must be closed too (`todo.py close hash:<hex>`), or it
   lingers open in todo.txt forever.
+- Close with reasoning. Before closing, append to the issue's
+  `.issues/<hash>/issue.md` a `Closed <date>: <reasoning>` footer
+  (original content first, never edited in place; the reasoning goes
+  after a blank line). The reasoning must state: what was decided
+  (fixed / not-a-bug / deferred / duplicate), the evidence, and the
+  hash of any issue spawned from the investigation. Never close an
+  issue with a bare `todo.py close` and no issue.md footer.
 
 Respond in English unless the user explicitly requests otherwise
 
