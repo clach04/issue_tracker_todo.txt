@@ -136,6 +136,27 @@ class TestWebUI(unittest.TestCase):
         self.assertIn('<pre>Issue Hash :', text)
         self.assertNotIn('<pre class="md">Issue Hash', text)
 
+    def test_show_page_raw_and_highlighted_todo_line(self):
+        # ADR-0010: the show page shows the raw index line AND the
+        # highlighted form (client-side grammar); no-JS fallback shows the
+        # raw line only.
+        h = self._add('todo.txt line with (A) priority +proj @ctx',
+                      description='desc')
+        status, headers, body = _call(_environ('/show/' + h))
+        self.assertEqual(status, '200 OK')
+        text = body.decode('utf-8')
+        self.assertIn('<h2>todo.txt line</h2>', text)
+        # Raw line: plain escaped text in a <pre> (full index line, with
+        # date and hash: prefix).
+        self.assertIn('<pre>2026-11-10 todo.txt line with (A) priority '
+                      '+proj @ctx hash:{}'.format(h), text)
+        self.assertIn('(A)', text)
+        # Highlighted form: span.todotxt wrapper.
+        self.assertIn('<span class="todotxt">', text)
+        self.assertIn('<pre class="todotxt-line">', text)
+        # The raw line precedes the highlighted one.
+        self.assertLess(text.index('<pre>'), text.index('<pre class="todotxt-line">'))
+
     def test_non_md_pages_have_no_scripts(self):
         # Error pages carry no assets; the index carries the todotxt set
         # (highlight.js + bootstrap, no markdown-it) per ADR-0010.

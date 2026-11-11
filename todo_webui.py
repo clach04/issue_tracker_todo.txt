@@ -316,7 +316,14 @@ def _show_by_hash(h):
         _html_escape(title), badge))
     parts.append('<pre>Issue Hash : {}\nHash Token : hash:{}\n'
                  'Index Line : {}\n</pre>'.format(
-                     _html_escape(h), _html_escape(h), _html_escape(index_line)))
+                     _html_escape(h), _html_escape(h),
+                     _html_escape(index_line)))
+    # ADR-0010: raw todo.txt line AND highlighted form (client-side
+    # grammar); no-JS fallback shows the raw line only.
+    parts.append('<h2>todo.txt line</h2>')
+    parts.append('<pre>{}</pre>'.format(_html_escape(index_line)))
+    parts.append('<pre class="todotxt-line">{}</pre>'.format(
+        _todotxt_span(index_line)))
     issue_md_path = os.path.join(issue_dir, 'issue.md')
     if os.path.exists(issue_md_path):
         parts.append('<h2>Description</h2>')

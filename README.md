@@ -324,6 +324,57 @@ block).
 - An empty checkbox (`- [ ]` with no text) is skipped with a warning;
   its children, if any, are **promoted** to top-level Issues.
 
+## Web UI
+
+A read-only web UI for the tracker lives in `todo_webui.py`:
+
+```bash
+python3 todo_webui.py            # defaults to 127.0.0.1:8000
+python3 todo_webui.py --port 8001
+```
+
+Routes: `/` (open issues, plus done.txt under a collapsed section),
+`/show/<hash>` (issue page, supports hash prefixes), `/show?line=<n>`,
+`/show/<hash>/attachments/<name>`, `/static/<name>`.
+
+### Syntax highlighting
+
+The web UI renders markdown client-side (vendored markdown-it, ADR-0008)
+and highlights code fences (vendored highlight.js, ADR-0009) plus
+todo.txt/done.txt tokens (custom highlight.js grammar, ADR-0010):
+priority `(A)/(B)/(C)` traffic-light, completion dates, `hash:` tokens
+(distinct color), `key:value` pairs, `+project`, `@context`, bare URLs,
+and the done.txt `x` completion mark.
+
+### Customizing the colors
+
+All token colors are plain CSS in `PAGE_STYLE` in `todo_webui.py` (the
+`PAGE_STYLE` string near the top of the file, after the route regexes).
+Edit the colors there:
+
+```python
+PAGE_STYLE = (
+    ...
+    '.hljs-todo-pri-a { color: #d73a49; font-weight: bold; }'  # priority (A)
+    '.hljs-todo-pri-b { color: #e36209; font-weight: bold; }'  # priority (B)
+    '.hljs-todo-pri-c { color: #b08800; font-weight: bold; }'  # priority (C)
+    '.hljs-todo-hash { color: #6f42c1; font-weight: bold; }'   # hash: token
+    '.hljs-todo-keyval { color: #22863a; }'                    # key:value
+    '.hljs-todo-project { color: #005cc5; }'                   # +project
+    '.hljs-todo-context { color: #d73a49; }'                   # @context
+    '.hljs-todo-date { color: #57606a; font-style: italic; }'  # dates
+    '.hljs-todo-url { color: #032f62; text-decoration: underline; }'
+    '.hljs-todo-x { color: #6a737d; font-weight: bold; }'      # done.txt x
+    ...
+)
+```
+
+The grammar's class names are defined in `webui.js` (bare names like
+`todo-hash`; highlight.js prepends its own `hljs-` prefix at runtime).
+Changing a color is a one-line edit in `PAGE_STYLE`; no vendor asset or
+JS changes needed. An optional user CSS file to override the built-in
+style is deferred (tracker issue hash:919d1a63).
+
 ## File Layout
 
 ```text
@@ -332,7 +383,11 @@ block).
 +-- done.txt                # Archived/completed issues
 +-- todo.py                 # Core CLI script
 +-- md2todo.py              # GFM task list importer (ADR-0006)
++-- todo_webui.py           # Read-only web UI (ADR-0007)
++-- webui.js                # Client-side markdown + highlight bootstrap
 +-- test_todo.py            # Standard library test suite
++-- test_webui.py           # Web UI test suite
++-- tools/vendor/           # Vendored markdown-it + highlight.js
 +-- .issues/                # Created lazily, per issue with details
     +-- a1b2c3d4/           # Unique issue hash directory
         +-- issue.md        # Extended description
