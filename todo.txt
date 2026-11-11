@@ -15,7 +15,6 @@ add support to sync with GitHub issues @feature hash:cfc7b903
 2026-11-08 warn when the FIRST imported item captures non-empty preceding content hash:d6f26a8f +tracker
 (A) 2026-11-08 TODO.md conversion bug. see https://github.com/clach04/codgent/commit/b9dc1a0910b7cfa9421cf969e116bce4765012a3 where TODO.md had to be restored, many non-child issues ended up in a issues.md `grep '^\- \[ \] ' TODO.md  | wc -l` yields 64 rows but import yields `would import 80 issue(s): 65 open, 15 closed; 56 issue.md file(s)`  !! it reads in `open, not started` as a todo item, even though its in a backtick block! :-( @bug hash:6e6ac366
 (B) 2026-11-08 research into whether a coding agent skill or tool (rather than using bash) would be useful (for example, tool for codgent) hash:8a99860a
-(A) readme doc bug `Line numbers are stable for life. A number copied from any list output addresses the same Index line forever; a later add never renumbers an existing issue.` is not accurate. Closing moves to done.txt ergo NOT "stable for life", external tools nor edits also break this promise in the readme (this line was added by hand as a text file edit) @doc @bug hash:b8e9d849
 2026-11-08 $EDITOR-driven comment creation and editing for todo.py comment hash:4e270ef0 +trackertool @feature
 2026-11-08 todo.py add -d description from stdin hash:fef2d86f +trackertool @feature
 2026-11-08 todo.py comment stdin: consider text-mode stdin handling hash:cbe3727f +trackertool @techdebt
