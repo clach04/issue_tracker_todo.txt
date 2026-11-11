@@ -1452,6 +1452,34 @@ class TestGfmImport(unittest.TestCase):
         body = self._issue_md(self._todo_lines()[0])
         self.assertIn("- [ ] fenced", body, "fenced content stays verbatim in issue.md")
 
+    def test_inline_fence_is_self_contained(self):
+        # hash:4ae2da8b-style inline fence: marker at line start AND close
+        # marker on the same line. Python-string-literal style, not GFM;
+        # seen in the wild (hash:6e6ac366 repro file). The line must be
+        # fenced, and the fence must NOT swallow the rest of the file.
+        self._import("- [ ] real\n"
+                     "    ```[tool] call {...}...}```\n"
+                     "- [ ] after\n")
+        lines = self._todo_lines()
+        self.assertEqual(len(lines), 2, "inline fence must not swallow following items")
+        body = self._issue_md(lines[0])
+        self.assertIn("```[tool] call {...}...}```", body, "inline fence stays verbatim")
+
+    def test_indented_bare_fence_marker_is_not_inline(self):
+        # An indented fence marker ALONE on its line opens a fence; it is
+        # not an inline fence. Regression: the first inline-fence fix
+        # compared line.rstrip() (kept indentation) and misclassified
+        # every indented '```' as an inline fence.
+        self._import("- [ ] real\n"
+                     "          ```\n"
+                     "          log content\n"
+                     "          ```\n"
+                     "- [ ] after\n")
+        lines = self._todo_lines()
+        self.assertEqual(len(lines), 2, "indented bare fence must not swallow following items")
+        body = self._issue_md(lines[0])
+        self.assertIn("log content", body, "fenced content stays verbatim in issue.md")
+
     def test_indented_item_without_parent_is_top_level(self):
         self._import("    - [ ] deeply indented orphan\n")
         lines = self._todo_lines()

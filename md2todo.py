@@ -60,12 +60,28 @@ def _fenced_flags(lines):
     """Per-line flag: True when the line is inside (or opens) a code fence.
 
     Fenced content is never a Checklist Item; it is Content verbatim.
+
+    Inline fences (open marker at line start + close marker at line end,
+    e.g. "```[tool] call {...}]}]}```") are self-contained: they close
+    on the SAME line. Not standard GFM (the closing fence must be alone
+    on its line there), but seen in the wild - Python-string-literal
+    style. Without this, the fence stays open until the next fence
+    marker on its own line, swallowing every following item until that
+    line (hash:4ae2da8b).
     """
     flags = []
     open_fence = None
     for line in lines:
         m = FENCE_RE.match(line)
         marker = m.group(1)[0] if m else None
+        if open_fence is None and m:
+            stripped = line.strip()
+            if stripped != m.group(1) and stripped.endswith(marker * 3):
+                # Inline fence: marker at line start + close marker run
+                # (3+ of the same char) at line end. The line is fenced
+                # and closes on the SAME line; no fence state is opened.
+                flags.append(True)
+                continue
         if open_fence is None:
             flags.append(m is not None)
             if m:

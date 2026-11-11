@@ -25,3 +25,4 @@ add support to sync with GitHub issues @feature hash:cfc7b903
 2026-11-11 Cross-issue references: explore LINK:/DUPE: key-value convention for todo.txt, issue.md, comments hash:470dc24a +trackertool @feature
 2026-11-11 todo.py comment: consider joining multiple shell word-split arguments into one comment text hash:6e4084b4 +trackertool @feature
 2026-11-11 md2todo: diagnostic note - grep is the wrong diagnostic for import counts hash:63f1914a
+2026-11-11 md2todo: inline fence (open+close on same line) swallows all following items until next fence marker hash:4ae2da8b
