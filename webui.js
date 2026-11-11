@@ -140,7 +140,7 @@
 
   function addCopyButtons() {
     var buttons = document.querySelectorAll('.copy-btn');
-    var ICON = '\uD83D\uDCCB'; // clipboard emoji (&#128203;)
+    var ICON = '\u29C9'; // copy icon (&#x29C9;)
     for (var i = 0; i < buttons.length; i++) {
       var btn = buttons[i];
       btn.addEventListener('click', function (event) {

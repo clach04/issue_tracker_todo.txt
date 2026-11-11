@@ -86,13 +86,13 @@ PAGE_STYLE = (
     '.hljs-todo-x { color: #6a737d; font-weight: bold; }'
     'details { margin-top: 1em; }'
     'summary { cursor: pointer; }'
-    # ADR-0011: copy button, hover-reveal on list rows (desktop only;
-    # mobile deferred to hash:0649b64e); always-visible on the show page.
-    # No-JS users see nothing (button is a plain span).
-    '.copy-btn { display: none; color: #57606a; cursor: pointer; '
+    # ADR-0011: copy button always visible by default; inside table rows
+    # it is hover-reveal (desktop only; mobile deferred to hash:0649b64e).
+    # No-JS users still see the icon (it is a plain span).
+    '.copy-btn { display: inline; color: #57606a; cursor: pointer; '
     'margin-left: 0.5em; font-size: 1em; }'
-    'tr:hover .copy-btn, .copy-btn:hover { display: inline; }'
-    '.copy-btn-always { display: inline !important; }'
+    'tr .copy-btn { display: none; }'
+    'tr:hover .copy-btn { display: inline; }'
     '.copy-btn.copied { color: #1a7f37; font-weight: bold; }'
     '</style>'
 )
@@ -237,7 +237,7 @@ def _todotxt_span(line, h=None):
     # hash: token the button copies.
     html = '<span class="todotxt">{}</span>'.format(_html_escape(line))
     if h:
-        html += '<span class="copy-btn" data-copy="hash:{}">&#128203;</span>'.format(
+        html += '<span class="copy-btn" data-copy="hash:{}">&#x29C9;</span>'.format(
             _html_escape(h))
     return html
 
@@ -335,7 +335,7 @@ def _show_by_hash(h):
     # ADR-0011: copy button next to the metadata block; always visible
     # (unlike the list rows, this is a standalone element, not a table
     # row, so hover-reveal cannot trigger on it).
-    parts.append('<span class="copy-btn copy-btn-always" data-copy="hash:{}">&#128203;</span>'
+    parts.append('<span class="copy-btn" data-copy="hash:{}">&#x29C9;</span>'
                  .format(_html_escape(h)))
     # ADR-0010: highlighted todo.txt line (client-side grammar); the
     # metadata block above already shows the raw line.

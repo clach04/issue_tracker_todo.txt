@@ -259,19 +259,20 @@ class TestWebUI(unittest.TestCase):
         # CSS display:none, and the JS only adds the click handler).
         self.assertIn('copy-btn', text)
         self.assertIn('data-copy', text)
-        # The button label is the clipboard emoji (&#128203;), not text.
-        self.assertIn('&#128203;</span>', text)
+        # The button label is the copy icon (&#x29C9;), not text.
+        self.assertIn('&#x29C9;</span>', text)
 
     def test_show_page_copy_button_always_visible(self):
-        # ADR-0011: the show-page copy button is always visible (it is a
-        # standalone element; hover-reveal cannot apply to it).
+        # ADR-0011: copy buttons are always visible by default; only
+        # table rows (the / list page) hover-reveal.
         h = self._add('show copy issue')
         status, headers, body = _call(_environ('/show/' + h))
         self.assertEqual(status, '200 OK')
         text = body.decode('utf-8')
-        self.assertIn('copy-btn-always', text)
         self.assertIn('data-copy="hash:{}"'.format(h), text)
-        self.assertIn('.copy-btn-always { display: inline !important; }', text)
+        self.assertIn('.copy-btn { display: inline;', text)
+        self.assertIn('tr .copy-btn { display: none; }', text)
+        self.assertNotIn('copy-btn-always', text)
 
     def test_static_serves_markdown_it_and_bootstrap(self):
         status, headers, body = _call(_environ('/static/webui.js'))
