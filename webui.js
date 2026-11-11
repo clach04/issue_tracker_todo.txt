@@ -140,6 +140,7 @@
 
   function addCopyButtons() {
     var buttons = document.querySelectorAll('.copy-btn');
+    var ICON = '\uD83D\uDCCB'; // clipboard emoji (&#128203;)
     for (var i = 0; i < buttons.length; i++) {
       var btn = buttons[i];
       btn.addEventListener('click', function (event) {
@@ -149,10 +150,10 @@
           return;
         }
         copyText(text, function (ok) {
-          self.textContent = ok ? 'copied' : 'copy failed';
+          self.textContent = ok ? '\u2705' : '\u274C'; // check / cross
           self.className = 'copy-btn' + (ok ? ' copied' : '');
           setTimeout(function () {
-            self.textContent = 'copy';
+            self.textContent = ICON;
             self.className = 'copy-btn';
           }, 1000);
         });

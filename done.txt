@@ -19,3 +19,4 @@ x 2026-11-09 (B) 2026-11-08 a web UI for reading (and writting/editing) todo.txt
 x 2026-11-10 2026-11-09 Web UI: render issue.md and comments as markdown, not escaped pre hash:e072da96 +trackertool @feature
 x 2026-11-10 2026-11-10 web UI: syntax highlighting for code fences and todo.txt/done.txt (client-side) hash:0a7d7e68 +trackertool @feature
 x 2026-11-10 (A) 2026-11-10 web UI: copy-to-clipboard for todo.txt rows and show view hash:70be6f02 +trackertool @feature
+x 2026-11-10 2026-11-10 web UI: show page - always-visible copy button (ADR-0011 follow-up) hash:7bd285ef +trackertool @feature

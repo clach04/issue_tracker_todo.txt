@@ -86,11 +86,13 @@ PAGE_STYLE = (
     '.hljs-todo-x { color: #6a737d; font-weight: bold; }'
     'details { margin-top: 1em; }'
     'summary { cursor: pointer; }'
-    # ADR-0011: copy button, hover-reveal (desktop only; mobile deferred
-    # to hash:0649b64e). No-JS users see nothing (button is a plain span).
+    # ADR-0011: copy button, hover-reveal on list rows (desktop only;
+    # mobile deferred to hash:0649b64e); always-visible on the show page.
+    # No-JS users see nothing (button is a plain span).
     '.copy-btn { display: none; color: #57606a; cursor: pointer; '
-    'margin-left: 0.5em; font-size: 0.85em; }'
+    'margin-left: 0.5em; font-size: 1em; }'
     'tr:hover .copy-btn, .copy-btn:hover { display: inline; }'
+    '.copy-btn-always { display: inline !important; }'
     '.copy-btn.copied { color: #1a7f37; font-weight: bold; }'
     '</style>'
 )
@@ -235,7 +237,7 @@ def _todotxt_span(line, h=None):
     # hash: token the button copies.
     html = '<span class="todotxt">{}</span>'.format(_html_escape(line))
     if h:
-        html += '<span class="copy-btn" data-copy="hash:{}">copy</span>'.format(
+        html += '<span class="copy-btn" data-copy="hash:{}">&#128203;</span>'.format(
             _html_escape(h))
     return html
 
@@ -330,13 +332,14 @@ def _show_by_hash(h):
                  'Index Line : {}\n</pre>'.format(
                      _html_escape(h), _html_escape(h),
                      _html_escape(index_line)))
-    # ADR-0011: copy button next to the metadata block (hover-reveal).
-    parts.append('<span class="copy-btn" data-copy="hash:{}">copy</span>'
+    # ADR-0011: copy button next to the metadata block; always visible
+    # (unlike the list rows, this is a standalone element, not a table
+    # row, so hover-reveal cannot trigger on it).
+    parts.append('<span class="copy-btn copy-btn-always" data-copy="hash:{}">&#128203;</span>'
                  .format(_html_escape(h)))
-    # ADR-0010: raw todo.txt line AND highlighted form (client-side
-    # grammar); no-JS fallback shows the raw line only.
+    # ADR-0010: highlighted todo.txt line (client-side grammar); the
+    # metadata block above already shows the raw line.
     parts.append('<h2>todo.txt line</h2>')
-    parts.append('<pre>{}</pre>'.format(_html_escape(index_line)))
     parts.append('<pre class="todotxt-line">{}</pre>'.format(
         _todotxt_span(index_line)))
     issue_md_path = os.path.join(issue_dir, 'issue.md')

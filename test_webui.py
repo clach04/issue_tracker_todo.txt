@@ -137,25 +137,23 @@ class TestWebUI(unittest.TestCase):
         self.assertNotIn('<pre class="md">Issue Hash', text)
 
     def test_show_page_raw_and_highlighted_todo_line(self):
-        # ADR-0010: the show page shows the raw index line AND the
-        # highlighted form (client-side grammar); no-JS fallback shows the
-        # raw line only.
+        # ADR-0010: the show page shows the highlighted todo.txt line
+        # (the metadata block above carries the raw line, so the
+        # duplicate raw block was removed).
         h = self._add('todo.txt line with (A) priority +proj @ctx',
                       description='desc')
         status, headers, body = _call(_environ('/show/' + h))
         self.assertEqual(status, '200 OK')
         text = body.decode('utf-8')
         self.assertIn('<h2>todo.txt line</h2>', text)
-        # Raw line: plain escaped text in a <pre> (full index line, with
-        # date and hash: prefix).
-        self.assertIn('<pre>2026-11-10 todo.txt line with (A) priority '
-                      '+proj @ctx hash:{}'.format(h), text)
         self.assertIn('(A)', text)
         # Highlighted form: span.todotxt wrapper.
         self.assertIn('<span class="todotxt">', text)
         self.assertIn('<pre class="todotxt-line">', text)
-        # The raw line precedes the highlighted one.
-        self.assertLess(text.index('<pre>'), text.index('<pre class="todotxt-line">'))
+        # Only ONE todo.txt line block: the metadata <pre> plus the
+        # highlighted one (the duplicate raw block was removed).
+        self.assertEqual(text.count('<pre class="todotxt-line">'), 1)
+        self.assertNotIn('<pre>2026-11-10 todo.txt line with (A)', text)
 
     def test_non_md_pages_have_no_scripts(self):
         # Error pages carry no assets; the index carries the todotxt set
@@ -261,6 +259,19 @@ class TestWebUI(unittest.TestCase):
         # CSS display:none, and the JS only adds the click handler).
         self.assertIn('copy-btn', text)
         self.assertIn('data-copy', text)
+        # The button label is the clipboard emoji (&#128203;), not text.
+        self.assertIn('&#128203;</span>', text)
+
+    def test_show_page_copy_button_always_visible(self):
+        # ADR-0011: the show-page copy button is always visible (it is a
+        # standalone element; hover-reveal cannot apply to it).
+        h = self._add('show copy issue')
+        status, headers, body = _call(_environ('/show/' + h))
+        self.assertEqual(status, '200 OK')
+        text = body.decode('utf-8')
+        self.assertIn('copy-btn-always', text)
+        self.assertIn('data-copy="hash:{}"'.format(h), text)
+        self.assertIn('.copy-btn-always { display: inline !important; }', text)
 
     def test_static_serves_markdown_it_and_bootstrap(self):
         status, headers, body = _call(_environ('/static/webui.js'))
