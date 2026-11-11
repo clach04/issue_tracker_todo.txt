@@ -1240,6 +1240,63 @@ class TestLocalIssueTracker(unittest.TestCase):
 
 
 # ----------------------------------------------------------------------
+# help: `todo.py help` behaves as if --help was issued (hash:eb1deb21)
+# ----------------------------------------------------------------------
+
+class TestHelpCommand(unittest.TestCase):
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.old_cwd = os.getcwd()
+        os.chdir(self.test_dir)
+        self._old_out, self._old_err = sys.stdout, sys.stderr
+        self._old_argv = sys.argv
+        sys.stdout, sys.stderr = _capture_stdout(), _capture_stderr()
+
+    def tearDown(self):
+        sys.argv = self._old_argv
+        sys.stdout, sys.stderr = self._old_out, self._old_err
+        os.chdir(self.old_cwd)
+        shutil.rmtree(self.test_dir)
+
+    def _run(self, argv):
+        sys.argv = ['todo.py'] + argv
+        try:
+            sys.stdout, sys.stderr = _capture_stdout(), _capture_stderr()
+            try:
+                todo.main()
+            except SystemExit as e:
+                code = e.code
+            else:
+                code = None
+            return code, sys.stdout.getvalue(), sys.stderr.getvalue()
+        finally:
+            sys.stdout, sys.stderr = self._old_out, self._old_err
+
+    def test_bare_help_equals_global_help(self):
+        _, help_text, _ = self._run(['help'])
+        _, dash_text, _ = self._run(['--help'])
+        self.assertEqual(help_text, dash_text,
+                         "todo.py help must print exactly what todo.py --help prints")
+
+    def test_help_topic_prints_subcommand_help(self):
+        _, via_help, _ = self._run(['help', 'add'])
+        _, via_flag, _ = self._run(['add', '--help'])
+        self.assertEqual(via_help, via_flag)
+        self.assertIn('title', via_help)
+
+    def test_help_unknown_topic_fails_loudly(self):
+        code, _, err = self._run(['help', 'bogus'])
+        self.assertEqual(code, 1, "expected exit 1 for unknown topic")
+        self.assertIn('unknown help topic', err)
+
+    def test_help_rejects_multiple_topics(self):
+        code, _, err = self._run(['help', 'add', 'list'])
+        self.assertEqual(code, 1, "expected exit 1 for multiple topics")
+        self.assertIn('at most one topic', err)
+
+
+# ----------------------------------------------------------------------
 # md2todo.py: GFM task list import (ADR-0006, docs/plans/gfm-import.md)
 # ----------------------------------------------------------------------
 

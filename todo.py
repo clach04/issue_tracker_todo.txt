@@ -848,6 +848,26 @@ def main():
     parser_hash.add_argument('identifier', nargs='?', default=None,
                              help='Optional: line number or title substring; omit for every Unhashed Line')
 
+    # 'help' is not a subcommand: behave as if --help had been issued
+    # (hash:eb1deb21). Intercepted before parse_args so 'todo.py help'
+    # prints the same help as 'todo.py --help', and 'todo.py help <cmd>'
+    # prints that subcommand's help. Unknown topics fail loudly.
+    if len(sys.argv) > 1 and sys.argv[1] == 'help':
+        if len(sys.argv) == 2:
+            parser.print_help()
+            sys.exit(0)
+        if len(sys.argv) > 3:
+            print("Error: help takes at most one topic: {}".format(
+                ', '.join(subparsers.choices)), file=sys.stderr)
+            sys.exit(1)
+        topic = sys.argv[2]
+        if topic in subparsers.choices:
+            subparsers.choices[topic].print_help()
+            sys.exit(0)
+        print("Error: unknown help topic '{}': choose from {}".format(
+            topic, ', '.join(subparsers.choices)), file=sys.stderr)
+        sys.exit(1)
+
     args = parser.parse_args()
 
     if args.command == 'add':
