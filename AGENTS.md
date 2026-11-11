@@ -22,7 +22,7 @@ Include stack trace plus semantic context (example: "Failed at model comparison 
 Use trace-level logs for major steps when debugging is enabled.
 
 NEVER `git push` without explicit user confirmation, each and EVERY time.
-NEVER `git commit` unless explicitly asked by the user.
+NEVER `git commit`, stage changes (`git add`), or delete files (`rm`) without explicit user confirmation, each and EVERY time.
 NEVER use `git add -A` or `git add .`; always list files explicitly in `git add`.
 
 ## docs/plans status scheme
