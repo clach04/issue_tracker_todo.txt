@@ -277,10 +277,11 @@ def cmd_add(args):
                                  project=args.project, context=args.context,
                                  date=today) + "\n"
 
-    # ADR-0004: `add` APPENDS, so Index line numbers are stable for
-    # life. Prepending renumbered every Issue on every add and silently
-    # invalidated any remembered line number.
-    # The number is only honest once append made it stable (ADR-0004).
+    # ADR-0004: `add` APPENDS, so it never renumbers an existing line.
+    # Prepending renumbered every Issue on every add and silently
+    # invalidated any remembered line number. (A line number is only
+    # stable while the issue stays open: close removes its line and
+    # shifts later numbers; hand edits can renumber too.)
     line_number = append_index_line(new_line)
     print("Created issue [{}] at line {}: '{}'".format(issue_hash, line_number, args.title))
 
@@ -571,6 +572,13 @@ def cmd_comment(args):
 
     print("Added comment to {} as {}".format(full_hash, comment_filename))
 
+def _warn_renumbered(lines_before, n):
+    # Closing removes a line, so every later Index line number shifts up
+    # by one. Warn once, only when the shift actually happened (closing
+    # the last line renumbers nothing). ADR-0004 amendment.
+    if n <= len(lines_before) - 1:
+        print("Note: {} open line(s) renumbered (later line numbers shifted up by one).".format(len(lines_before) - n))
+
 def cmd_close(args):
     ensure_environment()
     # Close-only exception for no-hash manual lines (ADR-0002): resolve
@@ -590,6 +598,7 @@ def cmd_close(args):
         append_done_line(minted)
         _trace(args, "close: minted hash {} for no-hash line {}".format(full_hash, n))
         print("Closed and archived issue [{}] (hash minted at close)".format(full_hash))
+        _warn_renumbered(lines, n)
         return
     full_hash = resolve_identifier(args, args.identifier)
 
@@ -599,12 +608,14 @@ def cmd_close(args):
 
     new_todo_lines = []
     matched_line = None
+    matched_line_no = None
     today = datetime.date.today().isoformat()
 
-    for line in lines:
+    for line_no, line in enumerate(lines, 1):
         if "hash:{}".format(full_hash) in line:
             # Format closed line: x YYYY-MM-DD <original_line>
             matched_line = format_archive_line(line.strip(), today) + "\n"
+            matched_line_no = line_no
         else:
             new_todo_lines.append(line)
 
@@ -618,6 +629,7 @@ def cmd_close(args):
     append_done_line(matched_line)
 
     print("Closed and archived issue [{}]".format(full_hash))
+    _warn_renumbered(lines, matched_line_no)
 
 # ---------------------------------------------------------------------------
 # Mint: bestow a hash on Unhashed Lines (hand-written Index lines)

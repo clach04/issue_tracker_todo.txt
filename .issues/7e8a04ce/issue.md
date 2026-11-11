@@ -1,0 +1,1 @@
+Spawned from hash:b8e9d849 (README line-number stability fix). `close` prints the line number, so users copy line numbers and then get burned when close renumbers. Surface the durable identifier (hash:<hex>, ADR-0002) more prominently in add/list output, e.g. lead with hash:<hex> or print it alongside the line number. Related: hash:b8e9d849

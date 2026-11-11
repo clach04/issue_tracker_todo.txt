@@ -29,9 +29,11 @@ Designed for developers who want a fast, grep-friendly, dependency-free tracker 
 `todo.txt` is **chronological**: `add` appends, exactly as `close`
 appends to `done.txt` (ADR-0004).
 
-- **Line numbers are stable for life.** A number copied from any `list`
-  output addresses the same Index line forever; a later `add` never
-  renumbers an existing issue.
+- **`add` appends, so it never renumbers.** An Index line number is
+  stable only while the issue stays open: `close` removes its line and
+  shifts every later line number up, and hand edits to `todo.txt` can
+  renumber too. For a reference that survives closing and renumbering,
+  copy the `hash:<hex>` identifier instead.
 - `add` prints the new number:
   `Created issue [<hash>] at line N: '<title>'`.
 - A `todo.txt` written before this change is reverse-chronological (the

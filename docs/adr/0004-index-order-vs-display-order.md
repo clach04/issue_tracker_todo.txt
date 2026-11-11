@@ -16,11 +16,15 @@ a rule for what "sorted" means when the file itself also has an order.
 - `add` **appends**, matching `close` -> `done.txt`, which has always
   appended. Prepend was inherited from the POC, never argued, never
   documented.
-- **Line numbers are stable for life.** A number copied from any view
-  addresses the same Index line forever. This is the hard invariant of
-  the change, not a side effect.
+- **`add` appends, so it never renumbers.** An Index line number is
+  stable only while the issue stays open: `close` removes its line and
+  shifts every later line number up, and hand edits to `todo.txt` can
+  renumber too. For a reference that survives closing and renumbering,
+  copy the `hash:<hex>` identifier instead. (Amended 2026-11-08: the
+  original claim that line numbers were "stable for life" was wrong -
+  see Consequences.)
 - `add` prints `Created issue [<hash>] at line N: '<title>'` - only
-  honest once append made N stable.
+  honest because append made N stable against `add`.
 
 **Display order** = what `list` prints, which is Index order unless a
 view flag overrides it:
@@ -84,3 +88,10 @@ view flag overrides it:
   strips the `x <date>` prefix (hash:b8480e3f). Date sort must strip the
   prefix itself; priority filtering on `--closed` stays exact-match
   until that issue is fixed.
+- **Amended 2026-11-08 (hash:b8e9d849)**: the original Decision claimed
+  "Line numbers are stable for life" and called it the hard invariant of
+  this change. That was wrong: `close` removes a line and shifts every
+  later line number up, and hand edits to `todo.txt` can renumber too.
+  The invariant that survives is the append order itself: `add` never
+  renumbers an existing line. For anything copied down long-term, use
+  the `hash:<hex>` Identifier (ADR-0002), not the line number.
