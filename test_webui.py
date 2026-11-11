@@ -212,6 +212,56 @@ class TestWebUI(unittest.TestCase):
         self.assertNotIn('<details>', text)
         self.assertNotIn('Closed Issues', text)
 
+    def test_index_copy_button_on_hashed_rows(self):
+        # ADR-0011: copy button per hashed row (hover-reveal), copied
+        # text is the hash: token from the data-copy attribute.
+        h = self._add('copy issue')
+        status, headers, body = _call(_environ('/'))
+        self.assertEqual(status, '200 OK')
+        text = body.decode('utf-8')
+        self.assertIn('data-copy="hash:{}"'.format(h), text)
+        self.assertIn('class="copy-btn"', text)
+        # Unhashed lines have no copy button.
+        with open(todo.TODO_FILE, 'a') as f:
+            f.write('\nhand-written line without a hash token\n')
+        status, headers, body = _call(_environ('/'))
+        text = body.decode('utf-8')
+        # The unhashed line has no button; the hashed one does.
+        # Count only the button spans (the CSS rule in PAGE_STYLE also
+        # contains the string 'copy-btn').
+        self.assertEqual(text.count('<span class="copy-btn"'), 1)
+
+    def test_index_copy_button_on_done_rows(self):
+        # done.txt rows get a copy button too (closed issues reachable
+        # by hash).
+        h = self._add('doomed issue')
+        todo.cmd_close(_ns(identifier=h, verbose=False))
+        status, headers, body = _call(_environ('/'))
+        self.assertEqual(status, '200 OK')
+        text = body.decode('utf-8')
+        done_part = text[text.rindex('Closed Issues'):]
+        self.assertIn('data-copy="hash:{}"'.format(h), done_part)
+
+    def test_show_page_copy_button(self):
+        # ADR-0011: copy button next to the metadata block.
+        h = self._add('show copy issue')
+        status, headers, body = _call(_environ('/show/' + h))
+        self.assertEqual(status, '200 OK')
+        text = body.decode('utf-8')
+        self.assertIn('data-copy="hash:{}"'.format(h), text)
+
+    def test_copy_button_nojs_fallback(self):
+        # No-JS users: the button is a plain span (hover-reveal shows
+        # nothing without JS); the copied text is still in the markup.
+        h = self._add('nojs issue')
+        status, headers, body = _call(_environ('/'))
+        self.assertEqual(status, '200 OK')
+        text = body.decode('utf-8')
+        # The span is present in the markup (no-JS styling hides it via
+        # CSS display:none, and the JS only adds the click handler).
+        self.assertIn('copy-btn', text)
+        self.assertIn('data-copy', text)
+
     def test_static_serves_markdown_it_and_bootstrap(self):
         status, headers, body = _call(_environ('/static/webui.js'))
         self.assertEqual(status, '200 OK')

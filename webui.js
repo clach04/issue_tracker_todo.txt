@@ -99,9 +99,71 @@
     }
   }
 
+  /* ADR-0011: copy-to-clipboard. Copied text is the hash: token from
+   * the button's data-copy attribute. Chain: navigator.clipboard
+   * (secure contexts only), then hidden textarea + execCommand('copy')
+   * (plain http:// LAN origins), then window.prompt as last resort.
+   * Feedback: button text changes to 'copied' for ~1s.
+   */
+  function copyText(text, done) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        done(true);
+      }, function () {
+        copyViaExecCommand(text, done);
+      });
+      return;
+    }
+    copyViaExecCommand(text, done);
+  }
+
+  function copyViaExecCommand(text, done) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch (e) {
+      ok = false;
+    }
+    document.body.removeChild(ta);
+    if (!ok) {
+      window.prompt('Copy the hash token:', text);
+    }
+    done(ok);
+  }
+
+  function addCopyButtons() {
+    var buttons = document.querySelectorAll('.copy-btn');
+    for (var i = 0; i < buttons.length; i++) {
+      var btn = buttons[i];
+      btn.addEventListener('click', function (event) {
+        var self = event.currentTarget;
+        var text = self.getAttribute('data-copy');
+        if (!text) {
+          return;
+        }
+        copyText(text, function (ok) {
+          self.textContent = ok ? 'copied' : 'copy failed';
+          self.className = 'copy-btn' + (ok ? ' copied' : '');
+          setTimeout(function () {
+            self.textContent = 'copy';
+            self.className = 'copy-btn';
+          }, 1000);
+        });
+      });
+    }
+  }
+
   function renderAll() {
     renderTodotxt();
     renderMarkdown();
+    addCopyButtons();
   }
 
   if (document.readyState === 'loading') {

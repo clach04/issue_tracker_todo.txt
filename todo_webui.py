@@ -86,6 +86,12 @@ PAGE_STYLE = (
     '.hljs-todo-x { color: #6a737d; font-weight: bold; }'
     'details { margin-top: 1em; }'
     'summary { cursor: pointer; }'
+    # ADR-0011: copy button, hover-reveal (desktop only; mobile deferred
+    # to hash:0649b64e). No-JS users see nothing (button is a plain span).
+    '.copy-btn { display: none; color: #57606a; cursor: pointer; '
+    'margin-left: 0.5em; font-size: 0.85em; }'
+    'tr:hover .copy-btn, .copy-btn:hover { display: inline; }'
+    '.copy-btn.copied { color: #1a7f37; font-weight: bold; }'
     '</style>'
 )
 
@@ -189,7 +195,7 @@ def _index_page():
         h = todo._hash_of_line(line)
         if h:
             text = '<a href="/show/{}">{}</a>'.format(
-                _html_escape(h), _todotxt_span(line))
+                _html_escape(h), _todotxt_span(line, h))
         else:
             # Unhashed Line: plain text, no link (read-only UI cannot mint).
             text = _todotxt_span(line)
@@ -214,7 +220,7 @@ def _done_section():
         if not line:
             continue
         rows.append('<tr><td>{}</td><td>{}</td></tr>'.format(
-            idx, _todotxt_span(line)))
+            idx, _todotxt_span(line, todo._hash_of_line(line))))
     if not rows:
         return ''
     return ('<details><summary>Closed Issues (done.txt)</summary>'
@@ -222,10 +228,16 @@ def _done_section():
             + ''.join(rows) + '</table></details>')
 
 
-def _todotxt_span(line):
+def _todotxt_span(line, h=None):
     # Marks the line for the client-side todo.txt grammar (ADR-0010);
-    # no-JS fallback is the escaped plain text.
-    return '<span class="todotxt">{}</span>'.format(_html_escape(line))
+    # no-JS fallback is the escaped plain text. The copy button is a
+    # no-JS-invisible span (hover-reveal, ADR-0011); data-copy holds the
+    # hash: token the button copies.
+    html = '<span class="todotxt">{}</span>'.format(_html_escape(line))
+    if h:
+        html += '<span class="copy-btn" data-copy="hash:{}">copy</span>'.format(
+            _html_escape(h))
+    return html
 
 
 class _ResolverArgs(object):
@@ -318,6 +330,9 @@ def _show_by_hash(h):
                  'Index Line : {}\n</pre>'.format(
                      _html_escape(h), _html_escape(h),
                      _html_escape(index_line)))
+    # ADR-0011: copy button next to the metadata block (hover-reveal).
+    parts.append('<span class="copy-btn" data-copy="hash:{}">copy</span>'
+                 .format(_html_escape(h)))
     # ADR-0010: raw todo.txt line AND highlighted form (client-side
     # grammar); no-JS fallback shows the raw line only.
     parts.append('<h2>todo.txt line</h2>')

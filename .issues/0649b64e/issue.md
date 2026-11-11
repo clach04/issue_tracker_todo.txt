@@ -1,0 +1,1 @@
+Deferred from hash:70be6f02 implementation. The copy button uses hover-reveal (CSS :hover), which does not work on touch devices. Mobile support was explicitly skipped for this feature (user decision); add a touch-visible button (always visible on touch or a tap-reveal mechanism) when mobile support is wanted. See README.md "Customizing the colors" section and ADR-0010.
