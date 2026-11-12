@@ -2,7 +2,7 @@
 2026-11-07 archived lines deviate from todo.txt token order: (P) after x <date>, titles unparsable hash:b8480e3f +trackertool @techdebt
 (C) 2026-11-07 no backfill path for done.txt (hash --closed deferred) hash:b6e88862 +trackertool @feature
 (C) 2026-11-06 Evaluate detached-worktree git strategy hash:d252c7a2 +trackertool @idea
-(C) 2026-11-06 Support EDITOR values containing arguments hash:506ef7da +trackertool @techdebt
+(D) 2026-11-06 Support EDITOR values containing arguments hash:506ef7da +trackertool @techdebt
 option to ensure edit can be explictly disabled, i.e. not spawning editors under batch hash:4e083e78
 document common tags, `@techdebt` something new for docs hash:ae89067d
 review all ADRs for future todo ideas not captured in task list hash:448315fe
@@ -22,8 +22,8 @@ add support to sync with GitHub issues @feature hash:cfc7b903
 2026-11-10 make hash:<hex> the visually primary identifier in add/list output hash:7e8a04ce +trackertool @feature
 2026-11-11 todo.py: --dir/--file accepted before the subcommand too (global options position) hash:40423e61 +trackertool @feature
 2026-11-11 todo.py add needs to show copy/pastable `hash:XYZ`, it only shows XYZ hash:1a0012fe
-2026-11-11 Cross-issue references: explore LINK:/DUPE: key-value convention for todo.txt, issue.md, comments hash:470dc24a +trackertool @feature
+(A) 2026-11-11 Cross-issue references: explore LINK:/DUPE: along with PARENT/CHILD key-value convention for todo.txt, issue.md, comments hash:470dc24a +trackertool @feature
 2026-11-11 todo.py comment: consider joining multiple shell word-split arguments into one comment text hash:6e4084b4 +trackertool @feature
 2026-11-11 md2todo: diagnostic note - grep is the wrong diagnostic for import counts hash:63f1914a
 2026-11-11 md2todo: extra test ideas for fence handling (deferred) hash:bcdb0f31
-2026-11-11 todo.py list should support hash and line number (maybe even text fragment search) hash:fa7cc0c2
+(A) 2026-11-11 todo.py list should support hash and line number (maybe even text fragment search) hash:fa7cc0c2
