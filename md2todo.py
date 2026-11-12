@@ -88,7 +88,10 @@ def _fenced_flags(lines):
                 open_fence = marker
         else:
             flags.append(True)
-            if m and marker == open_fence:
+            # GFM: the closing fence must be alone on its line (only
+            # whitespace after it). A fence-marker line with content
+            # (e.g. "```x```") is fence CONTENT, not a closer.
+            if m and marker == open_fence and line.strip() == m.group(1):
                 open_fence = None
     return flags
 
@@ -112,7 +115,7 @@ def _unclosed_fence_line(lines):
                 continue
             open_fence = marker
             open_line = index + 1
-        elif open_fence is not None and m and marker == open_fence:
+        elif open_fence is not None and m and marker == open_fence and line.strip() == m.group(1):
             open_fence = None
             open_line = None
     return open_line

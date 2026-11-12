@@ -1480,6 +1480,57 @@ class TestGfmImport(unittest.TestCase):
         body = self._issue_md(lines[0])
         self.assertIn("log content", body, "fenced content stays verbatim in issue.md")
 
+    def test_inline_fence_close_char_mismatch_opens_fence(self):
+        # hash:bcdb0f31 case 2: an inline fence with a close run of the
+        # OTHER char (e.g. "```x~~~") is not an inline fence; it opens a
+        # fence (same char required for the close run). The tilde close
+        # run does NOT close the backtick fence, so the fence stays open
+        # to EOF and the import fails hard (hash:40f5fad4).
+        self._import("- [ ] real\n"
+                     "```x~~~\n"
+                     "fenced content\n"
+                     "~~~\n"
+                     "- [ ] after\n", expect_failure=True)
+        self.assertIn("unclosed fence opens at line 2", self.err.getvalue(),
+                      "tilde close run does not close the backtick fence")
+
+    def test_inline_fence_trailing_spaces(self):
+        # hash:bcdb0f31 case 5: trailing spaces after the close run are
+        # accepted; the line is still an inline fence.
+        self._import("- [ ] real\n"
+                     "```x```   \n"
+                     "- [ ] after\n")
+        self.assertEqual(len(self._todo_lines()), 2, "trailing spaces after the close run accepted")
+
+    def test_inline_fence_info_string_with_fence_run(self):
+        # hash:bcdb0f31 case 6: an info string containing a fence run
+        # (e.g. "```python -c \"print(1)\"```") is an inline fence; the
+        # info string is not confused with the close marker.
+        self._import("- [ ] real\n"
+                     "```python -c \"print(1)\"```\n"
+                     "- [ ] after\n")
+        self.assertEqual(len(self._todo_lines()), 2, "info string with fence run treated as inline fence")
+
+    def test_inline_fence_close_run_is_last_run(self):
+        # hash:bcdb0f31 case 7: content between the markers containing a
+        # fence run (e.g. "```x```x```") is an inline fence; the close
+        # marker is the LAST run, not the first.
+        self._import("- [ ] real\n"
+                     "```x```x```\n"
+                     "- [ ] after\n")
+        self.assertEqual(len(self._todo_lines()), 2, "close marker is the last run")
+
+    def test_inline_fence_inside_open_fence(self):
+        # hash:bcdb0f31 case 8: an inline fence inside an open fence does
+        # not corrupt the fence state; the open fence stays open.
+        self._import("- [ ] real\n"
+                     "```\n"
+                     "```x```\n"
+                     "- [ ] swallowed\n"
+                     "```\n"
+                     "- [ ] after\n")
+        self.assertEqual(len(self._todo_lines()), 2, "inline fence inside open fence does not corrupt state")
+
     def test_unclosed_fence_fails_hard(self):
         # hash:40f5fad4: an unclosed fence swallows everything after it to
         # EOF, silently losing items. The import must fail hard with the
