@@ -14,10 +14,83 @@ import datetime
 import argparse
 import subprocess
 import glob
+import io
 
-TODO_FILE = 'todo.txt'
-DONE_FILE = 'done.txt'
-ISSUES_DIR = '.issues'
+IS_PY3 = sys.version_info >= (3,)
+
+def read_stdin_bytes():
+    # Byte-faithful stdin read (comment dash-marker plan; same idiom as
+    # ptcipher.py): py3 exposes raw bytes via sys.stdin.buffer; py2's
+    # sys.stdin is a file object whose read() already returns raw bytes.
+    # Asserted, not assumed - fails loudly if neither shape appears.
+    if IS_PY3:
+        assert hasattr(sys.stdin, 'buffer'), (
+            "expected py3 stdin with .buffer, got {}".format(type(sys.stdin)))
+        return sys.stdin.buffer.read()
+    assert hasattr(sys.stdin, 'read'), (
+        "expected py2 file-like stdin, got {}".format(type(sys.stdin)))
+    return sys.stdin.read()
+
+DASH_MARKER = '-'
+
+# Store location (ADR-0017): the store is a bundle - todo.txt + done.txt
+# + .issues/ all live in ONE directory. Env vars are read ONCE at import
+# time into the defaults; CLI flags override them via apply_store(). With
+# no env vars set the constants stay relative (cwd), so existing tests
+# and the web UI's cwd-based path joins keep working unchanged.
+DEFAULT_TODO_FILE = 'todo.txt'
+DEFAULT_DONE_FILE = 'done.txt'
+DEFAULT_ISSUES_DIR = '.issues'
+
+TODO_FILE = DEFAULT_TODO_FILE
+DONE_FILE = DEFAULT_DONE_FILE
+ISSUES_DIR = DEFAULT_ISSUES_DIR
+
+
+def apply_store(dir_value=None, file_value=None):
+    """Resolve the store bundle (ADR-0017) and mutate the module constants.
+
+    Precedence: CLI flags (dir_value / file_value) > env vars
+    (TODO_TRACKER_DIR / TODO_FILE) > defaults. A --file FULL PATH implies
+    its parent directory for the whole bundle (done.txt and .issues/ move
+    there); a bare file name only changes the todo index name. --dir
+    relocates the bundle directory with file names fixed. Relative paths
+    resolve against cwd at call time. No directory is created here;
+    ensure_environment() auto-creates them (mkdir -p semantics).
+    """
+    dir_val = dir_value if dir_value is not None else os.environ.get('TODO_TRACKER_DIR')
+    file_val = file_value if file_value is not None else os.environ.get('TODO_FILE')
+
+    todo_name = DEFAULT_TODO_FILE
+    if file_val is not None:
+        parent = os.path.dirname(file_val)
+        if parent:
+            # Full path implies its own parent dir for the whole bundle;
+            # --file wins over --dir in that case (ADR-0017).
+            dir_val = parent
+        todo_name = os.path.basename(file_val)
+    if dir_val is not None:
+        # Explicit dir (or --file parent): absolutize once so the store
+        # location is stable regardless of later cwd changes.
+        dir_val = os.path.abspath(dir_val)
+    else:
+        # No explicit dir: keep the constants RELATIVE (cwd-relative) so
+        # they follow the process cwd, as they always have.
+        dir_val = None
+
+    global TODO_FILE, DONE_FILE, ISSUES_DIR
+    if dir_val is None:
+        TODO_FILE = todo_name
+        DONE_FILE = DEFAULT_DONE_FILE
+        ISSUES_DIR = DEFAULT_ISSUES_DIR
+    else:
+        TODO_FILE = os.path.join(dir_val, todo_name)
+        DONE_FILE = os.path.join(dir_val, DEFAULT_DONE_FILE)
+        ISSUES_DIR = os.path.join(dir_val, DEFAULT_ISSUES_DIR)
+
+
+if os.environ.get('TODO_TRACKER_DIR') or os.environ.get('TODO_FILE'):
+    apply_store()
 
 HEX_RE = re.compile(r'^[0-9a-fA-F]+$')
 
@@ -46,6 +119,9 @@ PRIORITY_BOUND_RE = re.compile(r'^([A-Z])([+-])$')
 PRIORITY_FILTER_SHAPES = "C, A-C, C+, C- (A is highest)"
 
 def ensure_environment():
+    # ADR-0017: the store dir may not exist yet (e.g. --dir ~/notes/empty);
+    # auto-create it (mkdir -p semantics) - a missing dir is a valid empty
+    # tracker. os.makedirs creates parents too.
     if not os.path.exists(ISSUES_DIR):
         os.makedirs(ISSUES_DIR)
     for filepath in [TODO_FILE, DONE_FILE]:
@@ -532,6 +608,25 @@ DASH_MARKER = '-'
 
 def cmd_comment(args):
     ensure_environment()
+    # nargs='+' means shell word-splitting (e.g. `cat f` unquoted) shows
+    # up here as a list instead of an argparse usage error (hash:d2b6b1cf
+    # case 2). Fail loudly with a hint rather than silently joining; see
+    # hash:6e4084b4 for the deferred join idea. Programmatic callers may
+    # pass a plain string (py2 unicode / py3 str); anything else fails
+    # fast with actual vs expected.
+    if isinstance(args.text, type(u'')):
+        args.text = [args.text]
+    if not isinstance(args.text, list):
+        raise AssertionError("expected comment text as text or list of text, "
+                             "got {} (type {})".format(args.text, type(args.text).__name__))
+    if len(args.text) < 1:
+        raise AssertionError("expected 1+ comment text argument(s), got 0")
+    if len(args.text) > 1:
+        raise AssertionError("comment takes one text argument; got {} "
+                             "arguments (shell word-splitting?). Quote the text "
+                             "or pipe it via '-'; joining extras is deferred "
+                             "(hash:6e4084b4)".format(len(args.text)))
+    args.text = args.text[0]
     full_hash = resolve_identifier(args, args.identifier)
 
     # Dash Marker (docs/plans/comment-stdin.md): '-' as the text arg
@@ -550,7 +645,7 @@ def cmd_comment(args):
                   "<id> -")
         # Read bytes, write binary: byte fidelity, no text-mode
         # translation, no encoding validation. Empty stdin is an error.
-        data = sys.stdin.buffer.read()
+        data = read_stdin_bytes()
         if not data:
             _fail("no stdin content (Dash Marker '-' expects a piped body)")
         body = data
@@ -804,6 +899,15 @@ def main():
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument('--verbose', action='store_true', default=False,
                         help='Trace-level output for major steps')
+    # ADR-0017: store location. Flags override env vars (TODO_TRACKER_DIR /
+    # TODO_FILE), which override the defaults. See apply_store().
+    common.add_argument('--dir', default=None, metavar='DIR',
+                        help='Store directory (todo.txt, done.txt, .issues/ '
+                             'live here); env TODO_TRACKER_DIR overrides')
+    common.add_argument('--file', default=None, metavar='FILE',
+                        help='Todo index file name or full path; a full path '
+                             'implies its parent dir for the whole bundle; '
+                             'env TODO_FILE overrides')
 
     # add
     parser_add = subparsers.add_parser('add', parents=[common], help='Create a new issue')
@@ -832,7 +936,7 @@ def main():
     # comment
     parser_comment = subparsers.add_parser('comment', parents=[common], help='Add a timestamped comment to an issue')
     parser_comment.add_argument('identifier', help='Issue identifier: hash:<hex>, line number, hash prefix, or title substring')
-    parser_comment.add_argument('text', help="Comment text, or '-' to read the comment body from stdin")
+    parser_comment.add_argument('text', nargs='+', help="Comment text, or '-' to read the comment body from stdin")
 
     # close
     parser_close = subparsers.add_parser('close', parents=[common], help='Close an issue and archive it to done.txt')
@@ -869,6 +973,10 @@ def main():
         sys.exit(1)
 
     args = parser.parse_args()
+
+    # ADR-0017: apply store location (flags > env vars > defaults) before
+    # any command touches the store.
+    apply_store(dir_value=args.dir, file_value=args.file)
 
     if args.command == 'add':
         cmd_add(args)

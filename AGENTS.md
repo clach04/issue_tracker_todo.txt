@@ -43,6 +43,12 @@ convention: `docs/plans/README.md`.
   docs/adr/ for the next number).
 - When writing or editing either, prefer the domain-modeling skill
   (config/skills/domain-modeling/) - it carries the exact formats.
+- Issue.md `Progress`/`Recommendations` notes are issue-scoped, not
+  design records. A recommendation that settles a repo-wide decision
+  with trade-offs should be promoted to docs/adr/NNNN-slug.md,
+  referencing the issue hash; the issue.md note stays as the audit
+  trail. See README.md for the decision table (record type vs
+  question answered vs lifetime).
 
 ## Issue tracker filing (policy only; syntax lives in README.md)
 
@@ -58,6 +64,32 @@ convention: `docs/plans/README.md`.
 - Close what you finish. Fixing a tracked issue is not enough: the
   issue must be closed too (`todo.py close hash:<hex>`), or it
   lingers open in todo.txt forever.
+- Track progress in issue.md. When working an issue in stages
+  (e.g. "knock off the cheap ones"), append a `Progress (<date>):`
+  section to `.issues/<hash>/issue.md` after each stage: what was
+  done, what was found (including real bugs), what remains, and test
+  counts. Never close an issue silently mid-work.
+- Record recommendations and ideas in issue.md. Recommendations made
+  during a session (design choices, trade-offs, effort estimates,
+  "defer this" advice) belong in the issue's issue.md, not just in
+  chat: they are lost otherwise. Attribute them to the agent that
+  made them (e.g. "Codgent z-ai/glm-5.3-flash thinking: high").
+  Use a `Recommendations (<date>):` section, separate from the
+  `Progress (<date>):` section. Blank lines between entries; prefer
+  short lines over long run-on paragraphs.
+- Attribution wording. Attribute recommendations as
+  "Codgent <model> (<date>)", using the model name from the coding
+  harness when available. If the harness provides no model name,
+  write "Codgent <model unknown>" and ask the user to supply it;
+  never guess. The harness owns the model name; this is the agent's
+  responsibility only when it already has it.
+- Close with reasoning. Before closing, append to the issue's
+  `.issues/<hash>/issue.md` a `Closed <date>: <reasoning>` footer
+  (original content first, never edited in place; the reasoning goes
+  after a blank line). The reasoning must state: what was decided
+  (fixed / not-a-bug / deferred / duplicate), the evidence, and the
+  hash of any issue spawned from the investigation. Never close an
+  issue with a bare `todo.py close` and no issue.md footer.
 
 Respond in English unless the user explicitly requests otherwise
 

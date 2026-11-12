@@ -60,21 +60,65 @@ def _fenced_flags(lines):
     """Per-line flag: True when the line is inside (or opens) a code fence.
 
     Fenced content is never a Checklist Item; it is Content verbatim.
+
+    Inline fences (open marker at line start + close marker at line end,
+    e.g. "```[tool] call {...}]}]}```") are self-contained: they close
+    on the SAME line. Not standard GFM (the closing fence must be alone
+    on its line there), but seen in the wild - Python-string-literal
+    style. Without this, the fence stays open until the next fence
+    marker on its own line, swallowing every following item until that
+    line (hash:4ae2da8b).
     """
     flags = []
     open_fence = None
     for line in lines:
         m = FENCE_RE.match(line)
         marker = m.group(1)[0] if m else None
+        if open_fence is None and m:
+            stripped = line.strip()
+            if stripped != m.group(1) and stripped.endswith(marker * 3):
+                # Inline fence: marker at line start + close marker run
+                # (3+ of the same char) at line end. The line is fenced
+                # and closes on the SAME line; no fence state is opened.
+                flags.append(True)
+                continue
         if open_fence is None:
             flags.append(m is not None)
             if m:
                 open_fence = marker
         else:
             flags.append(True)
-            if m and marker == open_fence:
+            # GFM: the closing fence must be alone on its line (only
+            # whitespace after it). A fence-marker line with content
+            # (e.g. "```x```") is fence CONTENT, not a closer.
+            if m and marker == open_fence and line.strip() == m.group(1):
                 open_fence = None
     return flags
+
+def _unclosed_fence_line(lines):
+    """Return the 1-based line number of an unclosed fence opener, or None.
+
+    An unclosed fence is a data error in the source file: everything after
+    the opener is silently swallowed to EOF, so items are silently lost
+    (hash:4ae2da8b) and the trailing content is misattributed. Fail hard
+    (hash:40f5fad4); the fix is to close the fence in the source file.
+    """
+    open_fence = None
+    open_line = None
+    for index, line in enumerate(lines):
+        m = FENCE_RE.match(line)
+        marker = m.group(1)[0] if m else None
+        if open_fence is None and m:
+            stripped = line.strip()
+            if stripped != m.group(1) and stripped.endswith(marker * 3):
+                # Inline fence: self-contained, no state opened.
+                continue
+            open_fence = marker
+            open_line = index + 1
+        elif open_fence is not None and m and marker == open_fence and line.strip() == m.group(1):
+            open_fence = None
+            open_line = None
+    return open_line
 
 def _indent_width(text):
     # Tabs count as TAB_WIDTH columns; only relative order matters, and a
@@ -476,7 +520,16 @@ def build_parser():
     parser = argparse.ArgumentParser(
         prog='md2todo.py',
         description='Import a GFM task list into the tracker (ADR-0006)')
-    parser.add_argument('file', help='GFM markdown file with a task list (exactly one)')
+    parser.add_argument('input', help='GFM markdown file with a task list (exactly one)')
+    # ADR-0017: store location. Flags override env vars (TODO_TRACKER_DIR /
+    # TODO_FILE), which override the defaults. See todo.apply_store().
+    parser.add_argument('--dir', default=None, metavar='DIR',
+                        help='Store directory (todo.txt, done.txt, .issues/ '
+                             'live here); env TODO_TRACKER_DIR overrides')
+    parser.add_argument('--file', default=None, metavar='FILE',
+                        help='Todo index file name or full path; a full path '
+                             'implies its parent dir for the whole bundle; '
+                             'env TODO_FILE overrides')
     parser.add_argument('--dry-run', action='store_true', default=False,
                         help='Print the plan and the paths; write nothing')
     parser.add_argument('--flatten', action='store_true', default=False,
@@ -502,19 +555,30 @@ def _report_warnings(warnings, path):
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    # ADR-0017: resolve store location (flags > env vars > defaults)
+    # before touching the store.
+    todo.apply_store(dir_value=args.dir, file_value=args.file)
     if args.flatten:
         # The name is locked by ADR-0006 so a later version cannot be
         # forced to pick a different flag.
         todo._fail("--flatten is not implemented yet (v1 imports top-level items only)")
-    if not os.path.exists(args.file):
-        todo._fail("file not found: {}".format(args.file))
-    lines = _read_lines(args.file)
-    todo._trace(args, "md2todo: read {} line(s) from {}".format(len(lines), args.file))
+    if not os.path.exists(args.input):
+        todo._fail("file not found: {}".format(args.input))
+    lines = _read_lines(args.input)
+    todo._trace(args, "md2todo: read {} line(s) from {}".format(len(lines), args.input))
+    unclosed_line = _unclosed_fence_line(lines)
+    if unclosed_line is not None:
+        # Fail hard (hash:40f5fad4): an unclosed fence swallows everything
+        # after it to EOF, so items are silently lost. Fix the source file.
+        todo._fail("unclosed fence opens at line {} of {} and never closes;"
+                   " the fence would swallow everything after it to EOF."
+                   " Close the fence in the source file".format(
+                       unclosed_line, args.input))
     plan, warnings = build_plan(lines)
     if not plan:
-        _report_warnings(warnings, args.file)
-        todo._fail("no checklist items found in {}".format(args.file))
-    _report_warnings(warnings, args.file)
+        _report_warnings(warnings, args.input)
+        todo._fail("no checklist items found in {}".format(args.input))
+    _report_warnings(warnings, args.input)
     todo._trace(args, "md2todo: {} issue(s) planned, dry_run={}".format(len(plan), args.dry_run))
     if not args.dry_run:
         todo.ensure_environment()

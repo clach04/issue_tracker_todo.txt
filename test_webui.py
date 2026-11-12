@@ -483,5 +483,71 @@ class TestWebUI(unittest.TestCase):
             t.join()
 
 
+# ----------------------------------------------------------------------
+# ADR-0017: configurable store location (--dir / --file, env vars)
+# ----------------------------------------------------------------------
+
+class TestStoreLocation(unittest.TestCase):
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.old_cwd = os.getcwd()
+        os.chdir(self.test_dir)
+        self._old = (todo.TODO_FILE, todo.DONE_FILE, todo.ISSUES_DIR)
+        self._old_env = (os.environ.get('TODO_TRACKER_DIR'),
+                         os.environ.get('TODO_FILE'))
+        os.environ.pop('TODO_TRACKER_DIR', None)
+        os.environ.pop('TODO_FILE', None)
+
+    def tearDown(self):
+        todo.TODO_FILE, todo.DONE_FILE, todo.ISSUES_DIR = self._old
+        for name, value in (('TODO_TRACKER_DIR', self._old_env[0]),
+                            ('TODO_FILE', self._old_env[1])):
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+        os.chdir(self.old_cwd)
+        shutil.rmtree(self.test_dir)
+
+    def test_main_applies_store_flags(self):
+        # main() would block on serve_forever; instead call the same
+        # precedence helper the CLI path uses, then hit the WSGI app.
+        store = os.path.join(self.test_dir, 'store')
+        todo.apply_store(dir_value=store)
+        args = _ns(title='relocated issue', description=None,
+                   priority=None, project=None, context=None)
+        todo.cmd_add(args)
+        with open(todo.TODO_FILE, 'r') as f:
+            lines = [l.strip() for l in f if l.strip()]
+        h = todo._hash_of_line(lines[-1])
+        self.assertTrue(os.path.exists(os.path.join(store, 'todo.txt')))
+        # The web UI resolves through the constants, so it sees the store
+        # the same way main() would have set it up.
+        status, headers, body = _call(_environ('/'))
+        self.assertEqual(status, '200 OK')
+        self.assertIn('relocated issue', body.decode('utf-8'))
+        status, headers, body = _call(_environ('/show/' + h))
+        self.assertEqual(status, '200 OK')
+        self.assertIn('relocated issue', body.decode('utf-8'))
+
+    def test_file_full_path_bundle(self):
+        store = os.path.join(self.test_dir, 'store')
+        todo.apply_store(file_value=os.path.join(store, 'issues.txt'))
+        args = _ns(title='named index issue', description=None,
+                   priority=None, project=None, context=None)
+        todo.cmd_add(args)
+        with open(todo.TODO_FILE, 'r') as f:
+            lines = [l.strip() for l in f if l.strip()]
+        h = todo._hash_of_line(lines[-1])
+        self.assertTrue(os.path.exists(os.path.join(store, 'issues.txt')))
+        self.assertTrue(os.path.isdir(os.path.join(store, '.issues')))
+        status, headers, body = _call(_environ('/'))
+        self.assertEqual(status, '200 OK')
+        self.assertIn('named index issue', body.decode('utf-8'))
+        status, headers, body = _call(_environ('/show/' + h))
+        self.assertEqual(status, '200 OK')
+
+
 if __name__ == '__main__':
     unittest.main()

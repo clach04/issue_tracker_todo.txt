@@ -317,17 +317,26 @@ class TestLocalIssueTracker(unittest.TestCase):
 
     def _fake_stdin(self, data):
         # Replace sys.stdin with a fake piped stdin (isatty False).
-        # data is bytes; None means an empty pipe.
+        # data is bytes; None means an empty pipe. When py2_style=True the
+        # fake mimics py2's file stdin (read() on the object itself, no
+        # .buffer) so the read_stdin_bytes() shim is exercised on both
+        # interpreters (hash:d2b6b1cf).
         import io
         buf = io.BytesIO(data if data is not None else b'')
 
         class _FakeStdin(object):
-            def __init__(self, buffer):
-                self.buffer = buffer
+            def __init__(self, buffer, py2_style):
+                self._buffer = buffer
+                self._py2_style = py2_style
+                if not py2_style:
+                    self.buffer = buffer
+            def read(self):
+                assert self._py2_style, "read() only on py2-style fake stdin"
+                return self._buffer.read()
             def isatty(self):
                 return False
         self._old_stdin = sys.stdin
-        sys.stdin = _FakeStdin(buf)
+        sys.stdin = _FakeStdin(buf, py2_style=(sys.version_info[0] < 3))
         return buf
 
     def _restore_stdin(self):
@@ -346,6 +355,46 @@ class TestLocalIssueTracker(unittest.TestCase):
         # Raw bytes written as-is: no added newline, no normalization.
         body = self._read(os.path.join(comments_dir, comment_files[0]))
         self.assertEqual(body, 'piped body line one\nline two\n')
+
+    def test_comment_stdin_binary_bytes_py2_style(self):
+        # hash:d2b6b1cf: py2 stdin is a file object (read() returns raw
+        # bytes, no .buffer attribute). The fake py2-style stdin plus a
+        # non-ascii/high-byte body prove read_stdin_bytes() is
+        # byte-faithful on BOTH interpreters - the pre-fix code crashed
+        # with AttributeError on py2 here.
+        issue_hash = self._add("Stdin py2 issue")
+        raw = b'\x00\x01\xfe\xff binary \xc3\xa9 tail\n'
+        self._fake_stdin(raw)
+        try:
+            todo.cmd_comment(_ns(identifier="hash:"+issue_hash, text="-"))
+        finally:
+            self._restore_stdin()
+        comments_dir = os.path.join(todo.ISSUES_DIR, issue_hash, 'comments')
+        comment_files = os.listdir(comments_dir)
+        self.assertEqual(len(comment_files), 1)
+        with open(os.path.join(comments_dir, comment_files[0]), 'rb') as f:
+            self.assertEqual(f.read(), raw)
+
+    def test_comment_extra_text_arguments_fail_loudly(self):
+        # hash:d2b6b1cf case 2: `cat f` word-split into several tokens
+        # used to die in argparse with a bare usage error. With
+        # nargs='+' cmd_comment now rejects extras with a hint naming
+        # the deferred join idea (hash:6e4084b4).
+        issue_hash = self._add("Extra args issue")
+        stderr = _capture_stderr()
+        old_stderr = sys.stderr
+        sys.stderr = stderr
+        try:
+            with self.assertRaises(AssertionError) as excinfo:
+                todo.cmd_comment(_ns(identifier="hash:"+issue_hash,
+                                     text=["test", "line2"]))
+        finally:
+            sys.stderr = old_stderr
+        self.assertIn("one text argument", str(excinfo.exception))
+        self.assertIn("hash:6e4084b4", str(excinfo.exception))
+        # No comment file created on failure.
+        comments_dir = os.path.join(todo.ISSUES_DIR, issue_hash, 'comments')
+        self.assertFalse(os.path.exists(comments_dir))
 
     def test_comment_dash_marker_conflict_with_text_arg_fails(self):
         issue_hash = self._add("Stdin conflict issue")
@@ -1403,6 +1452,117 @@ class TestGfmImport(unittest.TestCase):
         body = self._issue_md(self._todo_lines()[0])
         self.assertIn("- [ ] fenced", body, "fenced content stays verbatim in issue.md")
 
+    def test_inline_fence_is_self_contained(self):
+        # hash:4ae2da8b-style inline fence: marker at line start AND close
+        # marker on the same line. Python-string-literal style, not GFM;
+        # seen in the wild (hash:6e6ac366 repro file). The line must be
+        # fenced, and the fence must NOT swallow the rest of the file.
+        self._import("- [ ] real\n"
+                     "    ```[tool] call {...}...}```\n"
+                     "- [ ] after\n")
+        lines = self._todo_lines()
+        self.assertEqual(len(lines), 2, "inline fence must not swallow following items")
+        body = self._issue_md(lines[0])
+        self.assertIn("```[tool] call {...}...}```", body, "inline fence stays verbatim")
+
+    def test_indented_bare_fence_marker_is_not_inline(self):
+        # An indented fence marker ALONE on its line opens a fence; it is
+        # not an inline fence. Regression: the first inline-fence fix
+        # compared line.rstrip() (kept indentation) and misclassified
+        # every indented '```' as an inline fence.
+        self._import("- [ ] real\n"
+                     "          ```\n"
+                     "          log content\n"
+                     "          ```\n"
+                     "- [ ] after\n")
+        lines = self._todo_lines()
+        self.assertEqual(len(lines), 2, "indented bare fence must not swallow following items")
+        body = self._issue_md(lines[0])
+        self.assertIn("log content", body, "fenced content stays verbatim in issue.md")
+
+    def test_inline_fence_close_char_mismatch_opens_fence(self):
+        # hash:bcdb0f31 case 2: an inline fence with a close run of the
+        # OTHER char (e.g. "```x~~~") is not an inline fence; it opens a
+        # fence (same char required for the close run). The tilde close
+        # run does NOT close the backtick fence, so the fence stays open
+        # to EOF and the import fails hard (hash:40f5fad4).
+        self._import("- [ ] real\n"
+                     "```x~~~\n"
+                     "fenced content\n"
+                     "~~~\n"
+                     "- [ ] after\n", expect_failure=True)
+        self.assertIn("unclosed fence opens at line 2", self.err.getvalue(),
+                      "tilde close run does not close the backtick fence")
+
+    def test_inline_fence_trailing_spaces(self):
+        # hash:bcdb0f31 case 5: trailing spaces after the close run are
+        # accepted; the line is still an inline fence.
+        self._import("- [ ] real\n"
+                     "```x```   \n"
+                     "- [ ] after\n")
+        self.assertEqual(len(self._todo_lines()), 2, "trailing spaces after the close run accepted")
+
+    def test_inline_fence_info_string_with_fence_run(self):
+        # hash:bcdb0f31 case 6: an info string containing a fence run
+        # (e.g. "```python -c \"print(1)\"```") is an inline fence; the
+        # info string is not confused with the close marker.
+        self._import("- [ ] real\n"
+                     "```python -c \"print(1)\"```\n"
+                     "- [ ] after\n")
+        self.assertEqual(len(self._todo_lines()), 2, "info string with fence run treated as inline fence")
+
+    def test_inline_fence_close_run_is_last_run(self):
+        # hash:bcdb0f31 case 7: content between the markers containing a
+        # fence run (e.g. "```x```x```") is an inline fence; the close
+        # marker is the LAST run, not the first.
+        self._import("- [ ] real\n"
+                     "```x```x```\n"
+                     "- [ ] after\n")
+        self.assertEqual(len(self._todo_lines()), 2, "close marker is the last run")
+
+    def test_inline_fence_inside_open_fence(self):
+        # hash:bcdb0f31 case 8: an inline fence inside an open fence does
+        # not corrupt the fence state; the open fence stays open.
+        self._import("- [ ] real\n"
+                     "```\n"
+                     "```x```\n"
+                     "- [ ] swallowed\n"
+                     "```\n"
+                     "- [ ] after\n")
+        self.assertEqual(len(self._todo_lines()), 2, "inline fence inside open fence does not corrupt state")
+
+    def test_unclosed_fence_fails_hard(self):
+        # hash:40f5fad4: an unclosed fence swallows everything after it to
+        # EOF, silently losing items. The import must fail hard with the
+        # line number of the fence opener.
+        self._import("- [ ] real\n"
+                     "```\n"
+                     "fenced content\n"
+                     "- [ ] swallowed\n"
+                     "- [ ] also swallowed\n", expect_failure=True)
+        self.assertEqual(self._todo_lines(), [], "import must not write anything")
+        self.assertIn("unclosed fence", self.err.getvalue(), "error must name the problem")
+        self.assertIn("line 2", self.err.getvalue(), "error must name the opener line")
+
+    def test_unclosed_fence_no_items_after_fails_hard(self):
+        # hash:40f5fad4: the fence is broken as a markdown document even
+        # with no items after it, so the import must fail hard too.
+        self._import("- [ ] real\n"
+                     "```\n"
+                     "fenced content\n", expect_failure=True)
+        self.assertEqual(self._todo_lines(), [], "import must not write anything")
+        self.assertIn("unclosed fence", self.err.getvalue(), "error must name the problem")
+        self.assertIn("line 2", self.err.getvalue(), "error must name the opener line")
+
+    def test_balanced_fence_imports_normally(self):
+        # hash:40f5fad4: balanced fences are unchanged, imports fine.
+        self._import("- [ ] real\n"
+                     "```\n"
+                     "fenced content\n"
+                     "```\n"
+                     "- [ ] after\n")
+        self.assertEqual(len(self._todo_lines()), 2, "balanced fence imports fine")
+
     def test_indented_item_without_parent_is_top_level(self):
         self._import("    - [ ] deeply indented orphan\n")
         lines = self._todo_lines()
@@ -1796,6 +1956,219 @@ class TestGfmImport(unittest.TestCase):
         titles = [todo._title_from_line(l) for l in self._todo_lines()]
         self.assertEqual(titles, ["second", "third"],
                          "open issues append in source order (ADR-0004)")
+
+
+# ----------------------------------------------------------------------
+# ADR-0017: configurable store location (--dir / --file, env vars)
+# ----------------------------------------------------------------------
+
+class TestStoreLocation(unittest.TestCase):
+
+    def setUp(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.old_cwd = os.getcwd()
+        os.chdir(self.test_dir)
+        self._old_out, self._old_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = _capture_stdout(), _capture_stderr()
+        # Save the store constants; apply_store() mutates them globally.
+        self._old = (todo.TODO_FILE, todo.DONE_FILE, todo.ISSUES_DIR)
+        self._old_env = (os.environ.get('TODO_TRACKER_DIR'),
+                         os.environ.get('TODO_FILE'))
+        os.environ.pop('TODO_TRACKER_DIR', None)
+        os.environ.pop('TODO_FILE', None)
+
+    def tearDown(self):
+        todo.TODO_FILE, todo.DONE_FILE, todo.ISSUES_DIR = self._old
+        for name, value in (('TODO_TRACKER_DIR', self._old_env[0]),
+                            ('TODO_FILE', self._old_env[1])):
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+        sys.stdout, sys.stderr = self._old_out, self._old_err
+        os.chdir(self.old_cwd)
+        shutil.rmtree(self.test_dir)
+
+    def _run(self, argv):
+        sys.argv = ['todo.py'] + argv
+        old_out, old_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = _capture_stdout(), _capture_stderr()
+        try:
+            try:
+                todo.main()
+            except SystemExit as e:
+                code = e.code
+            else:
+                code = None
+            out, err = sys.stdout.getvalue(), sys.stderr.getvalue()
+        finally:
+            sys.stdout, sys.stderr = old_out, old_err
+        # Normalize success (None) to 0 for assertions.
+        return (0 if code is None else code), out, err
+
+    def _read(self, path):
+        with io.open(path, 'r', encoding='utf-8') as f:
+            return f.read()
+
+    def test_apply_store_no_args_resets_to_relative_defaults(self):
+        # Sanity: no flags/env -> constants stay relative, following cwd.
+        todo.apply_store()
+        self.assertEqual(todo.TODO_FILE, 'todo.txt')
+        self.assertEqual(todo.DONE_FILE, 'done.txt')
+        self.assertEqual(todo.ISSUES_DIR, '.issues')
+
+    def test_dir_flag_relocates_bundle(self):
+        store = os.path.join(self.test_dir, 'store')
+        code, out, err = self._run(['add', '--dir', store, 'relocated issue'])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.exists(os.path.join(store, 'todo.txt')))
+        self.assertTrue(os.path.exists(os.path.join(store, 'done.txt')))
+        self.assertTrue(os.path.isdir(os.path.join(store, '.issues')))
+        # The absolute cwd store must NOT be polluted.
+        self.assertFalse(os.path.exists(os.path.join(self.test_dir, 'todo.txt')))
+        # list works against the same store.
+        code, out, err = self._run(['list', '--dir', store])
+        self.assertEqual(code, 0, err)
+        self.assertIn('relocated issue', out)
+
+    def test_file_full_path_implies_parent_dir_for_bundle(self):
+        store = os.path.join(self.test_dir, 'store')
+        code, out, err = self._run(
+            ['add', '--file', os.path.join(store, 'issues.txt'), 'full path issue'])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.exists(os.path.join(store, 'issues.txt')))
+        self.assertTrue(os.path.exists(os.path.join(store, 'done.txt')))
+        self.assertTrue(os.path.isdir(os.path.join(store, '.issues')))
+        code, out, err = self._run(
+            ['list', '--file', os.path.join(store, 'issues.txt')])
+        self.assertEqual(code, 0, err)
+        self.assertIn('full path issue', out)
+
+    def test_file_bare_name_plus_dir_combo(self):
+        store = os.path.join(self.test_dir, 'store')
+        code, out, err = self._run(
+            ['add', '--file', 'issues.txt', '--dir', store, 'bare name issue'])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.exists(os.path.join(store, 'issues.txt')))
+        self.assertTrue(os.path.exists(os.path.join(store, 'done.txt')))
+        self.assertTrue(os.path.isdir(os.path.join(store, '.issues')))
+        self.assertFalse(os.path.exists(os.path.join(store, 'todo.txt')))
+
+    def test_file_wins_over_dir_when_full_path(self):
+        store = os.path.join(self.test_dir, 'store')
+        other = os.path.join(self.test_dir, 'other')
+        code, out, err = self._run(
+            ['add', '--file', os.path.join(store, 'issues.txt'),
+             '--dir', other, 'precedence issue'])
+        self.assertEqual(code, 0, err)
+        # --file is the most specific: the bundle lands in its parent dir.
+        self.assertTrue(os.path.exists(os.path.join(store, 'issues.txt')))
+        self.assertTrue(os.path.isdir(os.path.join(store, '.issues')))
+        self.assertFalse(os.path.exists(os.path.join(other, 'todo.txt')))
+        self.assertFalse(os.path.exists(os.path.join(other, '.issues')))
+
+    def test_env_vars_override_defaults(self):
+        store = os.path.join(self.test_dir, 'store')
+        os.environ['TODO_TRACKER_DIR'] = store
+        code, out, err = self._run(['add', 'env dir issue'])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.exists(os.path.join(store, 'todo.txt')))
+        self.assertFalse(os.path.exists(os.path.join(self.test_dir, 'todo.txt')))
+
+        os.environ.pop('TODO_TRACKER_DIR')
+        store3 = os.path.join(self.test_dir, 'store3')
+        os.environ['TODO_FILE'] = os.path.join(store3, 'idx.txt')
+        code, out, err = self._run(['add', 'env file issue'])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.exists(os.path.join(store3, 'idx.txt')))
+        self.assertTrue(os.path.isdir(os.path.join(store3, '.issues')))
+
+    def test_flags_override_env_vars(self):
+        store = os.path.join(self.test_dir, 'store')
+        os.environ['TODO_TRACKER_DIR'] = os.path.join(self.test_dir, 'envstore')
+        code, out, err = self._run(['add', '--dir', store, 'flag wins issue'])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.exists(os.path.join(store, 'todo.txt')))
+        self.assertFalse(os.path.exists(os.path.join(self.test_dir, 'envstore')))
+
+    def test_missing_dir_auto_created(self):
+        store = os.path.join(self.test_dir, 'nested', 'deep', 'store')
+        code, out, err = self._run(['add', '--dir', store, 'deep issue'])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.exists(os.path.join(store, 'todo.txt')),
+                        "auto-create must mkdir -p the whole store path")
+
+    def test_close_moves_line_to_done_in_relocated_bundle(self):
+        store = os.path.join(self.test_dir, 'store')
+        code, out, err = self._run(['add', '--dir', store, 'close me'])
+        self.assertEqual(code, 0, err)
+        code, out, err = self._run(['list', '--dir', store])
+        self.assertEqual(code, 0, err)
+        line = [l for l in out.splitlines() if 'close me' in l][0]
+        n = int(line.split(':')[0].strip())
+        code, out, err = self._run(['close', '--dir', store, str(n)])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.exists(os.path.join(store, 'todo.txt')))
+        self.assertIn('close me', self._read(os.path.join(store, 'done.txt')))
+        self.assertNotIn('close me', self._read(os.path.join(store, 'todo.txt')))
+
+    def test_messages_use_configured_file_name(self):
+        store = os.path.join(self.test_dir, 'store')
+        code, out, err = self._run(
+            ['add', '--file', os.path.join(store, 'issues.txt'), 'named issue'])
+        self.assertEqual(code, 0, err)
+        # An in-range line WITHOUT a hash token makes the resolver name the
+        # configured file; the message must not say 'todo.txt'.
+        with io.open(os.path.join(store, 'issues.txt'), 'a') as f:
+            f.write('\n')
+        code, out, err = self._run(
+            ['show', '--file', os.path.join(store, 'issues.txt'), '2'])
+        self.assertEqual(code, 1, err)
+        self.assertIn('issues.txt', err,
+                      "error message must use the configured file name")
+        self.assertNotIn('todo.txt', err,
+                         "error message must not hardcode the default name")
+
+    def test_show_and_comment_work_in_relocated_bundle(self):
+        store = os.path.join(self.test_dir, 'store')
+        code, out, err = self._run(['add', '--dir', store, 'describe me',
+                                    '-d', 'body text'])
+        self.assertEqual(code, 0, err)
+        code, out, err = self._run(['show', '--dir', store, 'describe me'])
+        self.assertEqual(code, 0, err)
+        self.assertIn('body text', out)
+        code, out, err = self._run(['comment', '--dir', store,
+                                    'describe me', 'a note'])
+        self.assertEqual(code, 0, err)
+        self.assertTrue(os.path.isdir(os.path.join(store, '.issues')))
+
+    def test_md2todo_imports_into_relocated_bundle(self):
+        store = os.path.join(self.test_dir, 'store')
+        src = os.path.join(self.test_dir, 'in.md')
+        with io.open(src, 'w', encoding='utf-8') as f:
+            f.write('- [ ] imported issue\n')
+        self._run_md2todo([src, '--dir', store])
+        self.assertTrue(os.path.exists(os.path.join(store, 'todo.txt')))
+        self.assertIn('imported issue', self._read(os.path.join(store, 'todo.txt')))
+        self.assertTrue(os.path.isdir(os.path.join(store, '.issues')))
+
+    def _run_md2todo(self, argv):
+        old_out, old_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = _capture_stdout(), _capture_stderr()
+        try:
+            try:
+                md2todo.main(argv)
+            except SystemExit as e:
+                code = e.code
+            else:
+                code = None
+            err = sys.stderr.getvalue()
+            out = sys.stdout.getvalue()
+        finally:
+            sys.stdout, sys.stderr = old_out, old_err
+        code = 0 if code is None else code
+        self.assertEqual(code, 0, err)
+        return out, err
 
 
 if __name__ == '__main__':

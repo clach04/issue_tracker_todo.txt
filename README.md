@@ -226,7 +226,9 @@ curl https://example.com/plot | todo.py comment hash:XXXXXXXX
 
 - The body is read as **raw bytes** and written as-is: no encoding
   validation, no newline normalization, no added header. The comment
-  file is `.issues/<hash>/comments/<timestamp>.md` as usual.
+  file is `.issues/<hash>/comments/<timestamp>.md` as usual. Works on
+  Python 2 and 3 alike (py2 reads the `file` stdin directly, py3 reads
+  `sys.stdin.buffer`).
 - **Empty stdin** is an error (exit 1, no comment file created).
 - **Any text argument plus piped stdin** is a loud error (exit 1, no
   comment file created): give one or the other. A text argument with
@@ -236,7 +238,56 @@ curl https://example.com/plot | todo.py comment hash:XXXXXXXX
   shell with no stdin redirect, or pass the body via stdin with `-`.
 - A literal `-` comment body is **not expressible** (accepted
   limitation; use a longer wording or edit the file directly).
+- `comment` takes **exactly one** text argument. Shell word-splitting
+  (e.g. ``todo.py comment <id> `cat f` `` with a multi-word file) is a
+  loud error naming the problem, not an argparse usage dump; quote the
+  text or pipe it via `-`.
 - `comment` is the only command with stdin support.
+
+## Store location (`--dir` / `--file`, ADR-0017)
+
+The store is a **bundle**: `todo.txt`, `done.txt`, and `.issues/` live
+in one directory and are relocated as a unit. Two knobs, available on
+every `todo.py` subcommand, on `todo_webui.py`, and on `md2todo.py`:
+
+```text
+--dir DIR     relocate the bundle directory; file names stay fixed.
+--file FILE   point at the todo index by name or full path.
+```
+
+A full path in `--file` implies its **parent directory** for the whole
+bundle: `--file /home/me/notes/issues.txt` puts `done.txt` at
+`/home/me/notes/done.txt` and `.issues/` at `/home/me/notes/.issues/`.
+A bare file name only changes the name inside the resolved directory
+(`--file issues.txt --dir notes`).
+
+Precedence: **CLI flags > env vars > defaults**. The env vars are
+`TODO_TRACKER_DIR` (same as `--dir`) and `TODO_FILE` (same as
+`--file`). Relative values resolve against the process cwd; absolute
+paths are allowed, so a store may live outside any repo.
+
+```bash
+python3 todo.py add --dir ~/notes 'issue in another store'
+python3 todo.py list --file ~/notes/issues.txt
+TODO_TRACKER_DIR=~/notes python3 todo_webui.py --port 8001
+python3 md2todo.py notes.md --dir ~/notes
+```
+
+**Positional note:** the `--dir`/`--file` flags are parsed per
+subcommand, so they must come **after** the subcommand
+(`todo.py list --file X`). The global-option position
+(`todo.py --file X list`) is not accepted yet — tracked as
+`hash:40423e61`. Until then, use the env var form, which works
+anywhere:
+
+```bash
+TODO_FILE=tmp/todo.txt ./todo.py list
+```
+
+A missing store directory is auto-created (mkdir -p semantics): a
+non-existent dir is a valid empty tracker. The default store is
+`todo.txt` + `done.txt` + `.issues/` in the current directory, exactly
+as before.
 
 ## Importing a GFM task list (`md2todo.py`)
 
@@ -249,6 +300,12 @@ md2todo.py path/to/notes.md              # import
 md2todo.py path/to/notes.md --dry-run    # print the plan, write nothing
 md2todo.py notes.md -p B --project backend --context bug
 ```
+
+The positional argument (the markdown input file) is named `input`
+(ADR-0017): it was renamed from `file` so `--file` can point at the
+todo index unambiguously. Scripts that referenced `--file`-style flags
+of the old parser are unaffected; the positional was always given as a
+bare path.
 
 **v1 imports top-level items only.** Nested items are not Issues: they
 are stored verbatim (original lines, indentation intact) in the parent's
@@ -378,6 +435,22 @@ JS changes needed. An optional user CSS file to override the built-in
 style is deferred (tracker issue hash:919d1a63).
 
 ## File Layout
+
+### Where to record what
+
+| Record | Question it answers | Lifetime |
+|---|---|---|
+| ADR (`docs/adr/NNNN-*.md`) | What did we **decide** and why - for the whole repo, hard to reverse | Permanent, repo-wide |
+| issue.md `Progress (<date>):` | What did we **do** and find - for this one issue | Issue-scoped; closed with the issue |
+| issue.md `Recommendations (<date>):` | What did we **suggest** - for this one issue, not yet decided | Issue-scoped; may become an ADR or a decision |
+| issue.md `Closed (<date>):` | Why the issue was **closed** (fixed / not-a-bug / deferred / duplicate) | Issue-scoped; closed with the issue |
+
+The relationship: an issue.md `Recommendations` note is a **candidate
+ADR** - if a recommendation gets adopted repo-wide, it should be
+promoted to `docs/adr/NNNN-*.md` with the issue hash referenced; the
+issue.md note stays as the audit trail. Progress notes are the audit
+trail, not decision records. Glossary/terms go to `CONTEXT.md` (see
+AGENTS.md "Design records").
 
 ```text
 /

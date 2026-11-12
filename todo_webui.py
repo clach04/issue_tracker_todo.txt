@@ -186,7 +186,7 @@ def _read_text_lines(path):
 
 
 def _index_page():
-    todo_path = os.path.join(os.getcwd(), todo.TODO_FILE)
+    todo_path = todo.TODO_FILE
     lines = _read_text_lines(todo_path)
     rows = []
     # Blank lines count toward the Index number (matches cmd_list).
@@ -213,7 +213,7 @@ def _done_section():
     # done.txt listing under a collapsed <details> (ADR-0010). Same
     # grammar as todo.txt; no links (closed issues are reachable by
     # hash from the show page).
-    done_path = os.path.join(os.getcwd(), todo.DONE_FILE)
+    done_path = todo.DONE_FILE
     if not os.path.exists(done_path):
         return ''
     rows = []
@@ -232,8 +232,8 @@ def _done_section():
         rows.append('<tr><td>{}</td><td>{}</td></tr>'.format(idx, cell))
     if not rows:
         return ''
-    return ('<details><summary>Closed Issues (done.txt)</summary>'
-            '<table><tr><th>Line</th><th>Issue</th></tr>'
+    return ('<details><summary>Closed Issues ({})</summary>'.format(todo.DONE_FILE)
+            + '<table><tr><th>Line</th><th>Issue</th></tr>'
             + ''.join(rows) + '</table></details>')
 
 
@@ -316,9 +316,10 @@ def _show_by_line(n):
     if h:
         return _show_by_hash(h)
     # Unhashed Line: plain text, no hash to resolve.
-    body = ('<h1>todo.txt line {}</h1><pre>{}</pre>'
-            '<p><a href="/">back</a></p>'.format(n, _html_escape(line)))
-    return _respond('200 OK', _page('todo.txt line {}'.format(n), body))
+    label = '{} line {}'.format(os.path.basename(todo.TODO_FILE), n)
+    body = ('<h1>{}</h1><pre>{}</pre>'
+            '<p><a href="/">back</a></p>'.format(label, _html_escape(line)))
+    return _respond('200 OK', _page(label, body))
 
 
 def _show_by_hash(h):
@@ -331,7 +332,7 @@ def _show_by_hash(h):
         return _error_page('404 Not Found',
                            'No issue found for hash:{}'.format(h))
     title = todo._title_from_line(index_line)
-    issue_dir = os.path.join(os.getcwd(), todo.ISSUES_DIR, h)
+    issue_dir = os.path.join(todo.ISSUES_DIR, h)
     parts = []
     badge = 'closed' if closed else 'open'
     parts.append('<h1>{} <span class="badge">{}</span></h1>'.format(
@@ -347,7 +348,7 @@ def _show_by_hash(h):
                  .format(_html_escape(h)))
     # ADR-0010: highlighted todo.txt line (client-side grammar); the
     # metadata block above already shows the raw line.
-    parts.append('<h2>todo.txt line</h2>')
+    parts.append('<h2>{} line</h2>'.format(os.path.basename(todo.TODO_FILE)))
     parts.append('<pre class="todotxt-line">{}</pre>'.format(
         _todotxt_span(index_line)))
     issue_md_path = os.path.join(issue_dir, 'issue.md')
@@ -412,7 +413,7 @@ def _serve_attachment(token, name):
         h = _resolve(token)
     except _ResolutionError as e:
         return _error_page('404 Not Found', e.detail)
-    base = os.path.realpath(os.path.join(os.getcwd(), todo.ISSUES_DIR, h,
+    base = os.path.realpath(os.path.join(todo.ISSUES_DIR, h,
                                          'attachments'))
     target = os.path.realpath(os.path.join(base, name))
     # Containment check BEFORE any existence check: a traversal path
@@ -482,7 +483,18 @@ def main():
     parser.add_argument('--port', type=int, default=DEFAULT_SERVER_PORT,
                         help='Listen port (default {}); env LISTEN_PORT '
                              'overrides'.format(DEFAULT_SERVER_PORT))
+    # ADR-0017: store location. Flags override env vars (TODO_TRACKER_DIR /
+    # TODO_FILE), which override the defaults. See todo.apply_store().
+    parser.add_argument('--dir', default=None, metavar='DIR',
+                        help='Store directory (todo.txt, done.txt, .issues/ '
+                             'live here); env TODO_TRACKER_DIR overrides')
+    parser.add_argument('--file', default=None, metavar='FILE',
+                        help='Todo index file name or full path; a full path '
+                             'implies its parent dir for the whole bundle; '
+                             'env TODO_FILE overrides')
     args = parser.parse_args()
+
+    todo.apply_store(dir_value=args.dir, file_value=args.file)
 
     listen_address = os.environ.get('LISTEN_ADDRESS', args.listen_address)
     listen_port = os.environ.get('LISTEN_PORT', str(args.port))
