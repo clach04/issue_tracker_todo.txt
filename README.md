@@ -436,6 +436,22 @@ style is deferred (tracker issue hash:919d1a63).
 
 ## File Layout
 
+### Where to record what
+
+| Record | Question it answers | Lifetime |
+|---|---|---|
+| ADR (`docs/adr/NNNN-*.md`) | What did we **decide** and why - for the whole repo, hard to reverse | Permanent, repo-wide |
+| issue.md `Progress (<date>):` | What did we **do** and find - for this one issue | Issue-scoped; closed with the issue |
+| issue.md `Recommendations (<date>):` | What did we **suggest** - for this one issue, not yet decided | Issue-scoped; may become an ADR or a decision |
+| issue.md `Closed (<date>):` | Why the issue was **closed** (fixed / not-a-bug / deferred / duplicate) | Issue-scoped; closed with the issue |
+
+The relationship: an issue.md `Recommendations` note is a **candidate
+ADR** - if a recommendation gets adopted repo-wide, it should be
+promoted to `docs/adr/NNNN-*.md` with the issue hash referenced; the
+issue.md note stays as the audit trail. Progress notes are the audit
+trail, not decision records. Glossary/terms go to `CONTEXT.md` (see
+AGENTS.md "Design records").
+
 ```text
 /
 +-- todo.txt                # Active issues index

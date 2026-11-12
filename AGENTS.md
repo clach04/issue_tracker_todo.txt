@@ -43,6 +43,12 @@ convention: `docs/plans/README.md`.
   docs/adr/ for the next number).
 - When writing or editing either, prefer the domain-modeling skill
   (config/skills/domain-modeling/) - it carries the exact formats.
+- Issue.md `Progress`/`Recommendations` notes are issue-scoped, not
+  design records. A recommendation that settles a repo-wide decision
+  with trade-offs should be promoted to docs/adr/NNNN-slug.md,
+  referencing the issue hash; the issue.md note stays as the audit
+  trail. See README.md for the decision table (record type vs
+  question answered vs lifetime).
 
 ## Issue tracker filing (policy only; syntax lives in README.md)
 
