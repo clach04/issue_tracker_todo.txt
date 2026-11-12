@@ -63,6 +63,20 @@ convention: `docs/plans/README.md`.
   section to `.issues/<hash>/issue.md` after each stage: what was
   done, what was found (including real bugs), what remains, and test
   counts. Never close an issue silently mid-work.
+- Record recommendations and ideas in issue.md. Recommendations made
+  during a session (design choices, trade-offs, effort estimates,
+  "defer this" advice) belong in the issue's issue.md, not just in
+  chat: they are lost otherwise. Attribute them to the agent that
+  made them (e.g. "Codgent z-ai/glm-5.3-flash thinking: high").
+  Use a `Recommendations (<date>):` section, separate from the
+  `Progress (<date>):` section. Blank lines between entries; prefer
+  short lines over long run-on paragraphs.
+- Attribution wording. Attribute recommendations as
+  "Codgent <model> (<date>)", using the model name from the coding
+  harness when available. If the harness provides no model name,
+  write "Codgent <model unknown>" and ask the user to supply it;
+  never guess. The harness owns the model name; this is the agent's
+  responsibility only when it already has it.
 - Close with reasoning. Before closing, append to the issue's
   `.issues/<hash>/issue.md` a `Closed <date>: <reasoning>` footer
   (original content first, never edited in place; the reasoning goes
