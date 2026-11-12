@@ -22,13 +22,8 @@ Include stack trace plus semantic context (example: "Failed at model comparison 
 Use trace-level logs for major steps when debugging is enabled.
 
 NEVER `git push` without explicit user confirmation, each and EVERY time.
-NEVER `git commit`, `git add` (any form), `git rm`, `git mv`, `git clean`, or `git stash` without explicit user confirmation, each and EVERY time.
-NEVER `git add -A` or `git add .`; always list files explicitly.
-
-NEVER delete, rename, or move any file outside the files explicitly named
-in the request. No `rm`, `mv`, `unlink`, `del`, `delete`, or any deletion/renaming done via
-scripts or code. If a task seems to require touching a file not named in
-the request, stop and ask first.
+NEVER `git commit`, `git rm`, `git mv`, or `git add` (any form) without explicit user confirmation, each and EVERY time.
+NEVER `git add -A` or `git add .`; always list files explicitly in `git add`.
 
 ## docs/plans status scheme
 
