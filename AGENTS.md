@@ -58,6 +58,11 @@ convention: `docs/plans/README.md`.
 - Close what you finish. Fixing a tracked issue is not enough: the
   issue must be closed too (`todo.py close hash:<hex>`), or it
   lingers open in todo.txt forever.
+- Track progress in issue.md. When working an issue in stages
+  (e.g. "knock off the cheap ones"), append a `Progress (<date>):`
+  section to `.issues/<hash>/issue.md` after each stage: what was
+  done, what was found (including real bugs), what remains, and test
+  counts. Never close an issue silently mid-work.
 - Close with reasoning. Before closing, append to the issue's
   `.issues/<hash>/issue.md` a `Closed <date>: <reasoning>` footer
   (original content first, never edited in place; the reasoning goes
