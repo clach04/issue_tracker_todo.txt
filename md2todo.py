@@ -92,6 +92,31 @@ def _fenced_flags(lines):
                 open_fence = None
     return flags
 
+def _unclosed_fence_line(lines):
+    """Return the 1-based line number of an unclosed fence opener, or None.
+
+    An unclosed fence is a data error in the source file: everything after
+    the opener is silently swallowed to EOF, so items are silently lost
+    (hash:4ae2da8b) and the trailing content is misattributed. Fail hard
+    (hash:40f5fad4); the fix is to close the fence in the source file.
+    """
+    open_fence = None
+    open_line = None
+    for index, line in enumerate(lines):
+        m = FENCE_RE.match(line)
+        marker = m.group(1)[0] if m else None
+        if open_fence is None and m:
+            stripped = line.strip()
+            if stripped != m.group(1) and stripped.endswith(marker * 3):
+                # Inline fence: self-contained, no state opened.
+                continue
+            open_fence = marker
+            open_line = index + 1
+        elif open_fence is not None and m and marker == open_fence:
+            open_fence = None
+            open_line = None
+    return open_line
+
 def _indent_width(text):
     # Tabs count as TAB_WIDTH columns; only relative order matters, and a
     # tab always nests deeper than the same number of spaces.
@@ -538,6 +563,14 @@ def main(argv=None):
         todo._fail("file not found: {}".format(args.input))
     lines = _read_lines(args.input)
     todo._trace(args, "md2todo: read {} line(s) from {}".format(len(lines), args.input))
+    unclosed_line = _unclosed_fence_line(lines)
+    if unclosed_line is not None:
+        # Fail hard (hash:40f5fad4): an unclosed fence swallows everything
+        # after it to EOF, so items are silently lost. Fix the source file.
+        todo._fail("unclosed fence opens at line {} of {} and never closes;"
+                   " the fence would swallow everything after it to EOF."
+                   " Close the fence in the source file".format(
+                       unclosed_line, args.input))
     plan, warnings = build_plan(lines)
     if not plan:
         _report_warnings(warnings, args.input)

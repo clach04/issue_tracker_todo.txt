@@ -1480,6 +1480,38 @@ class TestGfmImport(unittest.TestCase):
         body = self._issue_md(lines[0])
         self.assertIn("log content", body, "fenced content stays verbatim in issue.md")
 
+    def test_unclosed_fence_fails_hard(self):
+        # hash:40f5fad4: an unclosed fence swallows everything after it to
+        # EOF, silently losing items. The import must fail hard with the
+        # line number of the fence opener.
+        self._import("- [ ] real\n"
+                     "```\n"
+                     "fenced content\n"
+                     "- [ ] swallowed\n"
+                     "- [ ] also swallowed\n", expect_failure=True)
+        self.assertEqual(self._todo_lines(), [], "import must not write anything")
+        self.assertIn("unclosed fence", self.err.getvalue(), "error must name the problem")
+        self.assertIn("line 2", self.err.getvalue(), "error must name the opener line")
+
+    def test_unclosed_fence_no_items_after_fails_hard(self):
+        # hash:40f5fad4: the fence is broken as a markdown document even
+        # with no items after it, so the import must fail hard too.
+        self._import("- [ ] real\n"
+                     "```\n"
+                     "fenced content\n", expect_failure=True)
+        self.assertEqual(self._todo_lines(), [], "import must not write anything")
+        self.assertIn("unclosed fence", self.err.getvalue(), "error must name the problem")
+        self.assertIn("line 2", self.err.getvalue(), "error must name the opener line")
+
+    def test_balanced_fence_imports_normally(self):
+        # hash:40f5fad4: balanced fences are unchanged, imports fine.
+        self._import("- [ ] real\n"
+                     "```\n"
+                     "fenced content\n"
+                     "```\n"
+                     "- [ ] after\n")
+        self.assertEqual(len(self._todo_lines()), 2, "balanced fence imports fine")
+
     def test_indented_item_without_parent_is_top_level(self):
         self._import("    - [ ] deeply indented orphan\n")
         lines = self._todo_lines()
