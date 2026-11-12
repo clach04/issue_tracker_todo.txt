@@ -26,3 +26,4 @@ add support to sync with GitHub issues @feature hash:cfc7b903
 2026-11-11 todo.py comment: consider joining multiple shell word-split arguments into one comment text hash:6e4084b4 +trackertool @feature
 2026-11-11 md2todo: diagnostic note - grep is the wrong diagnostic for import counts hash:63f1914a
 2026-11-11 md2todo: extra test ideas for fence handling (deferred) hash:bcdb0f31
+2026-11-11 todo.py list should support hash and line number (maybe even text fragment search) hash:fa7cc0c2
