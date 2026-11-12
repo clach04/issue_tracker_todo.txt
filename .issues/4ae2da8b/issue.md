@@ -29,3 +29,16 @@ Fence runs now: 4-9, 125-125 (inline), 659-662, 774-814, 840-844, 900-941,
 Tests: 2 new regression tests in test_todo.py (test_inline_fence_is_
 self_contained, test_indented_bare_fence_marker_is_not_inline); 123 tests
 OK (test_todo.py), 38 OK (test_webui.py).
+Closed 2026-11-12: fixed as designed. The fix grew from "a few cheap
+fence cases" (hash:bcdb0f31) into a full fence-handling decision set:
+- Inline fences self-contained (this issue, commit 5c47461-adjacent).
+- Bare-marker close (a marker line with content does not close).
+- Unclosed fence fails the import loudly (hash:40f5fad4).
+- The decisions are recorded in ADR-0018 (docs/adr/0018-md2todo-fence-
+  handling.md), including the deliberate GFM deviation and the
+  close-run length rule (accepted, not length-verified).
+- Deferred fence edge cases live in hash:bcdb0f31.
+
+Recommendations (Codgent on the model, harness-attributed): record
+the GFM deviation in an ADR (done: ADR-0018), and add the
+"Where to record what" table to README.md for humans (done).
