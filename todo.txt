@@ -2,7 +2,7 @@
 (A) 2026-11-11 todo.py list should support hash and line number (maybe even text fragment search) hash:fa7cc0c2
 (B) 2026-11-08 research into whether a coding agent skill or tool (rather than using bash) would be useful (for example, tool for codgent) hash:8a99860a
 (C) 2026-11-07 no backfill path for done.txt (hash --closed deferred) hash:b6e88862 +trackertool @feature
-(C) 2026-11-06 Evaluate detached-worktree git strategy hash:d252c7a2 +trackertool @idea
+(A) 2026-11-06 Evaluate detached-worktree git strategy hash:d252c7a2 +trackertool @idea
 (D) 2026-11-06 Support EDITOR values containing arguments hash:506ef7da +trackertool @techdebt
 2026-11-07 TODO: -s short flag for --sort, revisit after real use hash:50000d8e +trackertool @feature
 2026-11-07 archived lines deviate from todo.txt token order: (P) after x <date>, titles unparsable hash:b8480e3f +trackertool @techdebt
@@ -16,12 +16,12 @@ add support to sync with GitHub issues @feature hash:cfc7b903
 2026-11-08 md2todo second import mode: top-level-only via explicit flag (deferred from gfm-import plan) hash:8c1cad08 +trackertool @feature
 2026-11-08 warn when the FIRST imported item captures non-empty preceding content hash:d6f26a8f +tracker
 2026-11-08 $EDITOR-driven comment creation and editing for todo.py comment hash:4e270ef0 +trackertool @feature
-2026-11-08 todo.py add -d description from stdin hash:fef2d86f +trackertool @feature
-2026-11-08 todo.py comment stdin: consider text-mode stdin handling hash:cbe3727f +trackertool @techdebt
+(D) 2026-11-08 todo.py add -d description from stdin hash:fef2d86f +trackertool @feature
+2026-11-08 todo.py comment stdin: consider text-mode (rather than binary) stdin handling hash:cbe3727f +trackertool @techdebt
 2026-11-10 web UI: option to load a user CSS file to override built-in colors hash:919d1a63 +trackertool @feature
 2026-11-10 web UI: expand priority token range with distinct colors hash:01ba52a8 +trackertool @feature
 2026-11-10 web UI: copy-to-clipboard on mobile/touch devices hash:0649b64e +trackertool @feature
-2026-11-10 make hash:<hex> the visually primary identifier in add/list output hash:7e8a04ce +trackertool @feature
+(A) 2026-11-10 make hash:<hex> the visually primary identifier in add/list output hash:7e8a04ce +trackertool @feature
 2026-11-11 todo.py: --dir/--file accepted before the subcommand too (global options position) hash:40423e61 +trackertool @feature
 2026-11-11 todo.py add needs to show copy/pastable `hash:XYZ`, it only shows XYZ hash:1a0012fe
 2026-11-11 todo.py comment: consider joining multiple shell word-split arguments into one comment text hash:6e4084b4 +trackertool @feature
