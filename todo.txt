@@ -1,8 +1,11 @@
 (A) 2026-11-11 Cross-issue references: explore LINK:/DUPE: along with PARENT/CHILD key-value convention for todo.txt, issue.md, comments hash:470dc24a +trackertool @feature
+(A) 2026-11-13 define more example Context Tags, e.g. `@testing-needed`, `@user-input-needed` hash:4cac455d
 (A) 2026-11-11 todo.py list should support hash and line number (maybe even text fragment search) hash:fa7cc0c2
+(A) 2026-11-11 todo.py add needs to show copy/pastable `hash:XYZ`, it only shows XYZ hash:1a0012fe - same issue with comment, be nice if full filename was displayed too
+(A) 2026-11-10 make hash:<hex> the visually primary identifier in add/list output hash:7e8a04ce +trackertool @feature
 (B) 2026-11-08 research into whether a coding agent skill or tool (rather than using bash) would be useful (for example, tool for codgent) hash:8a99860a
-(C) 2026-11-07 no backfill path for done.txt (hash --closed deferred) hash:b6e88862 +trackertool @feature
 (A) 2026-11-06 Evaluate detached-worktree git strategy hash:d252c7a2 +trackertool @idea
+(C) 2026-11-07 no backfill path for done.txt (hash --closed deferred) hash:b6e88862 +trackertool @feature
 (D) 2026-11-06 Support EDITOR values containing arguments hash:506ef7da +trackertool @techdebt
 2026-11-07 TODO: -s short flag for --sort, revisit after real use hash:50000d8e +trackertool @feature
 2026-11-07 archived lines deviate from todo.txt token order: (P) after x <date>, titles unparsable hash:b8480e3f +trackertool @techdebt
@@ -21,9 +24,8 @@ add support to sync with GitHub issues @feature hash:cfc7b903
 2026-11-10 web UI: option to load a user CSS file to override built-in colors hash:919d1a63 +trackertool @feature
 2026-11-10 web UI: expand priority token range with distinct colors hash:01ba52a8 +trackertool @feature
 2026-11-10 web UI: copy-to-clipboard on mobile/touch devices hash:0649b64e +trackertool @feature
-(A) 2026-11-10 make hash:<hex> the visually primary identifier in add/list output hash:7e8a04ce +trackertool @feature
 2026-11-11 todo.py: --dir/--file accepted before the subcommand too (global options position) hash:40423e61 +trackertool @feature
-2026-11-11 todo.py add needs to show copy/pastable `hash:XYZ`, it only shows XYZ hash:1a0012fe
 2026-11-11 todo.py comment: consider joining multiple shell word-split arguments into one comment text hash:6e4084b4 +trackertool @feature
 2026-11-11 md2todo: diagnostic note - grep is the wrong diagnostic for import counts hash:63f1914a
 2026-11-11 md2todo: extra test ideas for fence handling (deferred) hash:bcdb0f31
+2026-11-13 consider color output, if only for number and hash in `list` hash:f7f5472f
