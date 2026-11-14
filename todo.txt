@@ -3,7 +3,7 @@
 (A) 2026-11-11 todo.py list should support hash and line number (maybe even text fragment search) hash:fa7cc0c2
 (A) 2026-11-11 todo.py add needs to show copy/pastable `hash:XYZ`, it only shows XYZ hash:1a0012fe - same issue with comment, be nice if full filename was displayed too
 (A) 2026-11-10 make hash:<hex> the visually primary identifier in add/list output hash:7e8a04ce +trackertool @feature
-(B) 2026-11-08 research into whether a coding agent skill or tool (rather than using bash) would be useful (for example, tool for codgent) hash:8a99860a
+(B) 2026-11-08 research into whether a coding agent skill or tool (rather than using bash) would be useful (for example, tool for codgent. See Codgent, it has more complete rules than this project does as of 2026-11-13) hash:8a99860a
 (A) 2026-11-06 Evaluate detached-worktree git strategy hash:d252c7a2 +trackertool @idea
 (C) 2026-11-07 no backfill path for done.txt (hash --closed deferred) hash:b6e88862 +trackertool @feature
 (D) 2026-11-06 Support EDITOR values containing arguments hash:506ef7da +trackertool @techdebt
