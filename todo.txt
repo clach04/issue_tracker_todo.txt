@@ -29,3 +29,4 @@ add support to sync with GitHub issues @feature hash:cfc7b903
 2026-11-11 md2todo: diagnostic note - grep is the wrong diagnostic for import counts hash:63f1914a
 2026-11-11 md2todo: extra test ideas for fence handling (deferred) hash:bcdb0f31
 2026-11-13 consider color output, if only for number and hash in `list` hash:f7f5472f
+2026-11-13 avoid concurrency issue with global variables (i.e. not file mutex) hash:d48446e0
